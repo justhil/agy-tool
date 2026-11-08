@@ -1,0 +1,1975 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antigravity × Gemini 4 Argon — 提示词哲学对比与二进制重构规范</title>
+  <style>
+    :root {
+      /* Warm Editorial & Swiss Engineering Palette (No pure #fff or #000) */
+      --paper-bg: #f5f4f0;
+      --paper-card: #fbfaf7;
+      --paper-subtle: #eeece6;
+      --paper-code: #f0eee8;
+      --ink-primary: #18191c;
+      --ink-secondary: #4a4d55;
+      --ink-muted: #767a84;
+      --rule-light: #dfdcd4;
+      --rule-medium: #c8c4ba;
+      --rule-heavy: #222428;
+
+      /* Semantic Accents — Muted, High-Contrast Editorial Tones */
+      --crimson-ink: #9e2a2b;
+      --crimson-bg: #f9ebeb;
+      --crimson-border: #e5c3c3;
+
+      --forest-ink: #1b5e43;
+      --forest-bg: #e9f4ee;
+      --forest-border: #b8dccb;
+
+      --navy-ink: #1d4e89;
+      --navy-bg: #eaf1f8;
+      --navy-border: #bfd3e8;
+
+      --ochre-ink: #8a5a14;
+      --ochre-bg: #f8f1e4;
+
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Newsreader", "Source Serif 4", "Songti SC", "SimSun", Georgia, serif;
+      --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      background-color: var(--paper-bg);
+      color: var(--ink-primary);
+      font-family: var(--font-sans);
+      font-size: 14.5px;
+      line-height: 1.6;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      padding-bottom: 96px;
+    }
+
+    /* Sticky Top Index Bar */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background-color: rgba(245, 244, 240, 0.94);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--rule-medium);
+    }
+
+    .top-nav-inner {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 0 24px;
+      min-height: 52px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .doc-id {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--ink-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .doc-id-tag {
+      background-color: var(--ink-primary);
+      color: var(--paper-card);
+      padding: 2px 7px;
+      font-size: 11px;
+      border-radius: 2px;
+    }
+
+    .section-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .section-link {
+      min-height: 44px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-secondary);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: opacity 150ms var(--ease);
+    }
+
+    .section-link:hover {
+      color: var(--ink-primary);
+    }
+
+    .kernel-switch {
+      display: inline-flex;
+      background-color: var(--paper-subtle);
+      border: 1px solid var(--rule-medium);
+      border-radius: 4px;
+      padding: 2px;
+    }
+
+    .kernel-btn {
+      min-height: 36px;
+      padding: 0 12px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--ink-secondary);
+      background: transparent;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: transform 140ms var(--ease), opacity 140ms var(--ease);
+    }
+
+    .kernel-btn.active {
+      background-color: var(--paper-card);
+      color: var(--ink-primary);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(24, 25, 28, 0.08);
+    }
+
+    /* Page Wrapper */
+    .page {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Editorial Masthead */
+    .masthead {
+      padding: 40px 0 32px;
+      border-bottom: 2px solid var(--rule-heavy);
+    }
+
+    .masthead-kicker {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-secondary);
+      margin-bottom: 10px;
+    }
+
+    .masthead-title {
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 700;
+      line-height: 1.22;
+      letter-spacing: -0.02em;
+      color: var(--ink-primary);
+      max-width: 36ch;
+    }
+
+    .masthead-lead {
+      margin-top: 14px;
+      font-size: 15.5px;
+      line-height: 1.65;
+      color: var(--ink-secondary);
+      max-width: 78ch;
+    }
+
+    /* Spec Summary Strip */
+    .spec-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-bottom: 1px solid var(--rule-medium);
+      background-color: var(--paper-card);
+    }
+
+    .spec-cell {
+      padding: 18px 20px;
+      border-right: 1px solid var(--rule-light);
+    }
+
+    .spec-cell:last-child {
+      border-right: none;
+    }
+
+    .spec-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--ink-muted);
+    }
+
+    .spec-val {
+      margin-top: 4px;
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink-primary);
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .spec-tag {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 2px;
+    }
+
+    .tag-forest {
+      background-color: var(--forest-bg);
+      color: var(--forest-ink);
+      border: 1px solid var(--forest-border);
+    }
+
+    .tag-crimson {
+      background-color: var(--crimson-bg);
+      color: var(--crimson-ink);
+      border: 1px solid var(--crimson-border);
+    }
+
+    .tag-navy {
+      background-color: var(--navy-bg);
+      color: var(--navy-ink);
+      border: 1px solid var(--navy-border);
+    }
+
+    .spec-sub {
+      margin-top: 4px;
+      font-size: 12.5px;
+      color: var(--ink-secondary);
+    }
+
+    /* Section Chapters */
+    .chapter {
+      padding-top: 48px;
+    }
+
+    .chapter-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--rule-heavy);
+      margin-bottom: 24px;
+    }
+
+    .chapter-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .chapter-title {
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      color: var(--ink-primary);
+    }
+
+    .chapter-desc {
+      margin-top: 6px;
+      font-size: 14px;
+      color: var(--ink-secondary);
+      max-width: 76ch;
+    }
+
+    /* Filter Bar */
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-btn {
+      min-height: 40px;
+      padding: 0 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-secondary);
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: transform 140ms var(--ease), opacity 140ms var(--ease);
+    }
+
+    .filter-btn:hover {
+      color: var(--ink-primary);
+      border-color: var(--ink-primary);
+    }
+
+    .filter-btn.active {
+      background-color: var(--ink-primary);
+      color: var(--paper-card);
+      border-color: var(--ink-primary);
+      font-weight: 600;
+    }
+
+    /* Core Paradigm Thesis Box */
+    .paradigm-box {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--rule-medium);
+      background-color: var(--paper-card);
+      margin-bottom: 24px;
+    }
+
+    .paradigm-half {
+      padding: 20px 24px;
+    }
+
+    .paradigm-half:first-child {
+      border-right: 1px solid var(--rule-medium);
+      background-color: #faf5f5;
+    }
+
+    .paradigm-half:last-child {
+      background-color: #f4f9f6;
+    }
+
+    .paradigm-kicker {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .paradigm-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .paradigm-list {
+      list-style: none;
+      font-size: 13.5px;
+      color: var(--ink-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    /* 8-Dimension Ledger Table / Cards */
+    .ledger {
+      display: flex;
+      flex-direction: column;
+      border-top: 1px solid var(--rule-medium);
+    }
+
+    .ledger-item {
+      background-color: var(--paper-card);
+      border-left: 1px solid var(--rule-medium);
+      border-right: 1px solid var(--rule-medium);
+      border-bottom: 1px solid var(--rule-medium);
+    }
+
+    .ledger-header {
+      padding: 14px 20px;
+      background-color: var(--paper-subtle);
+      border-bottom: 1px solid var(--rule-light);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .ledger-title-group {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .ledger-code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink-primary);
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+      padding: 1px 7px;
+      border-radius: 2px;
+    }
+
+    .ledger-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink-primary);
+    }
+
+    .ledger-meta {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ledger-grid {
+      display: grid;
+      grid-template-columns: 28% 36% 36%;
+    }
+
+    .ledger-col {
+      padding: 18px 20px;
+      border-right: 1px solid var(--rule-light);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .ledger-col:last-child {
+      border-right: none;
+    }
+
+    .col-kicker {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .col-kicker.symptom {
+      color: var(--ochre-ink);
+    }
+
+    .col-kicker.stock {
+      color: var(--crimson-ink);
+    }
+
+    .col-kicker.surgical {
+      color: var(--forest-ink);
+    }
+
+    .col-heading {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink-primary);
+      margin-bottom: 6px;
+    }
+
+    .col-prose {
+      font-size: 13.5px;
+      color: var(--ink-secondary);
+      line-height: 1.62;
+    }
+
+    .code-excerpt {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      padding: 10px 12px;
+      border-radius: 3px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code-excerpt.stock {
+      background-color: var(--crimson-bg);
+      border-left: 3px solid var(--crimson-ink);
+      color: #4f1819;
+    }
+
+    .code-excerpt.surgical {
+      background-color: var(--forest-bg);
+      border-left: 3px solid var(--forest-ink);
+      color: #123c2a;
+    }
+
+    .code-excerpt.neutral {
+      background-color: var(--paper-code);
+      border-left: 3px solid var(--ink-muted);
+      color: var(--ink-secondary);
+    }
+
+    /* Section 2: Memory Ribbon & Slot Table */
+    .memory-map-card {
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .memory-map-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .memory-ribbon {
+      height: 34px;
+      width: 100%;
+      display: flex;
+      border: 1px solid var(--rule-heavy);
+      border-radius: 2px;
+      overflow: hidden;
+      background-color: var(--paper-subtle);
+    }
+
+    .ribbon-seg {
+      height: 100%;
+      border-right: 1px solid rgba(24, 25, 28, 0.25);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      overflow: hidden;
+      white-space: nowrap;
+      transition: opacity 150ms var(--ease);
+    }
+
+    .ribbon-seg:hover {
+      opacity: 0.82;
+    }
+
+    .ribbon-KEEP {
+      background-color: var(--navy-bg);
+      color: var(--navy-ink);
+    }
+
+    .ribbon-REPLACE {
+      background-color: var(--forest-bg);
+      color: var(--forest-ink);
+    }
+
+    .ribbon-STRIP {
+      background-color: var(--crimson-bg);
+      color: var(--crimson-ink);
+      text-decoration: line-through;
+    }
+
+    .memory-legend {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-secondary);
+    }
+
+    .legend-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 6px;
+      vertical-align: middle;
+      border: 1px solid var(--rule-heavy);
+    }
+
+    /* Data Tables */
+    .spec-table-wrap {
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+      overflow-x: auto;
+    }
+
+    table.spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    table.spec-table th {
+      padding: 11px 16px;
+      background-color: var(--paper-subtle);
+      border-bottom: 1px solid var(--rule-medium);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-secondary);
+    }
+
+    table.spec-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--rule-light);
+      font-size: 13.5px;
+      vertical-align: top;
+    }
+
+    table.spec-table tr.clickable-row {
+      cursor: pointer;
+    }
+
+    table.spec-table tr.clickable-row:hover td {
+      background-color: #f3f1eb;
+    }
+
+    table.spec-table tr.selected-row td {
+      background-color: var(--ochre-bg);
+    }
+
+    /* Slot Diff Drawer */
+    .slot-diff-box {
+      margin-top: 16px;
+      border: 1px solid var(--rule-heavy);
+      background-color: var(--paper-card);
+    }
+
+    .slot-diff-bar {
+      padding: 12px 18px;
+      background-color: var(--ink-primary);
+      color: var(--paper-card);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .slot-diff-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .slot-diff-pane {
+      padding: 16px 18px;
+      border-right: 1px solid var(--rule-light);
+    }
+
+    .slot-diff-pane:last-child {
+      border-right: none;
+    }
+
+    /* Section 4: Side-by-Side Final Prompt & Script */
+    .deliverable-grid {
+      display: grid;
+      grid-template-columns: 7fr 5fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel-box {
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+    }
+
+    .panel-bar {
+      padding: 12px 18px;
+      background-color: var(--paper-subtle);
+      border-bottom: 1px solid var(--rule-medium);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink-primary);
+    }
+
+    .action-btn {
+      min-height: 38px;
+      padding: 0 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--paper-card);
+      background-color: var(--ink-primary);
+      border: 1px solid var(--ink-primary);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: transform 140ms var(--ease), opacity 140ms var(--ease);
+    }
+
+    .action-btn:hover {
+      opacity: 0.88;
+    }
+
+    .action-btn:active {
+      transform: scale(0.98);
+    }
+
+    .action-btn.secondary {
+      background-color: var(--paper-card);
+      color: var(--ink-primary);
+      border-color: var(--rule-medium);
+    }
+
+    .prompt-viewer {
+      padding: 18px 20px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.62;
+      color: var(--ink-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 820px;
+      overflow-y: auto;
+    }
+
+    .cmd-block {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--rule-light);
+    }
+
+    .cmd-block:last-child {
+      border-bottom: none;
+    }
+
+    .cmd-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--ink-primary);
+      margin-bottom: 4px;
+    }
+
+    .cmd-desc {
+      font-size: 12.5px;
+      color: var(--ink-secondary);
+      margin-bottom: 8px;
+    }
+
+    .cmd-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background-color: var(--paper-code);
+      border: 1px solid var(--rule-medium);
+      padding: 8px 12px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-primary);
+      overflow-x: auto;
+    }
+
+    .mini-copy {
+      min-height: 32px;
+      padding: 0 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background-color: var(--paper-card);
+      border: 1px solid var(--rule-medium);
+      border-radius: 2px;
+      cursor: pointer;
+      shrink: 0;
+      white-space: nowrap;
+    }
+
+    .mini-copy:hover {
+      border-color: var(--ink-primary);
+    }
+
+    input[type="checkbox"].slot-check {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--forest-ink);
+      cursor: pointer;
+    }
+
+    @media (max-width: 1024px) {
+      .spec-strip {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .paradigm-box {
+        grid-template-columns: 1fr;
+      }
+      .paradigm-half:first-child {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-medium);
+      }
+      .ledger-grid {
+        grid-template-columns: 1fr;
+      }
+      .ledger-col {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-light);
+      }
+      .slot-diff-cols {
+        grid-template-columns: 1fr;
+      }
+      .slot-diff-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-light);
+      }
+      .deliverable-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .page {
+        padding: 0 14px;
+      }
+      .top-nav-inner {
+        padding: 8px 14px;
+      }
+      .spec-strip {
+        grid-template-columns: 1fr;
+      }
+      .spec-cell {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-light);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sticky Top Index Header -->
+  <header class="top-nav">
+    <div class="top-nav-inner">
+      <div class="doc-id">
+        <span class="doc-id-tag">SPEC · ARGON-AGY</span>
+        <span>Antigravity × Gemini 4 Argon 提示词重构与二进制解剖报告</span>
+      </div>
+      <nav class="section-links" aria-label="章节导航">
+        <a class="section-link" href="#sec-philosophy">§1 哲学与逻辑对抗 (8维)</a>
+        <a class="section-link" href="#sec-binary">§2 Go embed.FS 槽位手术</a>
+        <a class="section-link" href="#sec-tools">§3 原生 19 工具护栏</a>
+        <a class="section-link" href="#sec-deliverable">§4 替换提示词与补丁脚本</a>
+      </nav>
+      <div class="kernel-switch" role="group" aria-label="切换内核">
+        <button class="kernel-btn active" id="btn-kernel-ide" data-kernel="ide">IDE 内核 (50.7KB)</button>
+        <button class="kernel-btn" id="btn-kernel-cli" data-kernel="cli">CLI 内核 (42.5KB)</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <!-- Masthead -->
+    <section class="masthead">
+      <div class="masthead-kicker">Engineering Comparison & Binary Patch Specification</div>
+      <h1 class="masthead-title">
+        从「平台耦合八股文」到「外科手术级高密度契约」：Antigravity 原生提示词与 Amp × Argon 重构版深度对比
+      </h1>
+      <p class="masthead-lead">
+        基于对本机 Antigravity CLI (<code>language_server.exe</code>) 与 IDE (<code>language_server_windows_x64.exe</code>) 的 PE64 逆向解剖，Google 云端网关仅校验 <code>identity.tmpl</code> 的 400 余字身份指纹（<code>abuse.pi:antigravity_identity</code>），而其余 12 个模板槽位塞满了 40KB+ 的强制外置报告、过时知识库前置锁与功能推销。本规范在 <strong>100% 保留反重力原生 19 个内置工具</strong> 的前提下，融合 Sourcegraph Amp 实战纪律与 Google Argon 官方开发者指南，将系统提示词收敛至 <strong>4.6 KB</strong>。
+      </p>
+    </section>
+
+    <!-- Key Metrics Strip -->
+    <section class="spec-strip" aria-label="关键量化指标">
+      <div class="spec-cell">
+        <div class="spec-label">静态提示词体积缩减</div>
+        <div class="spec-val">
+          <span id="metric-size-text">4.6 KB</span>
+          <span class="spec-tag tag-forest" id="metric-pct-text">-83.4% 模板载荷</span>
+        </div>
+        <div class="spec-sub" id="metric-saved-text">每轮对话净省 ~6,000+ 静态重算 Tokens</div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-label">Google 网关指纹校验</div>
+        <div class="spec-val">
+          <span>100% PASS</span>
+          <span class="spec-tag tag-navy">identity.tmpl 0 改动</span>
+        </div>
+        <div class="spec-sub">严格匹配 <code>LINT.ThenChange(.../abuse.pi)</code></div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-label">反重力原生工具保留率</div>
+        <div class="spec-val">
+          <span>19 / 19</span>
+          <span class="spec-tag tag-forest">Protobuf 直出无损</span>
+        </div>
+        <div class="spec-sub">补齐 <code>edit_file</code> 唯一性锚点与 <code>ArtifactMetadata</code> 防报错</div>
+      </div>
+      <div class="spec-cell">
+        <div class="spec-label">物理清零致幻槽位</div>
+        <div class="spec-val">
+          <span id="metric-strip-count">7 个 .tmpl</span>
+          <span class="spec-tag tag-crimson" id="metric-strip-bytes">-22,211 Bytes</span>
+        </div>
+        <div class="spec-sub">拔除 <code>brain/</code> 强制写文件、KI 前置锁与 <code>/goal</code> 推销</div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- CHAPTER 1: PHILOSOPHY & LOGIC COMPARISON                           -->
+    <!-- ================================================================== -->
+    <section id="sec-philosophy" class="chapter">
+      <div class="chapter-head">
+        <div>
+          <span class="chapter-num">Section 01 · Epistemology, State Topology & Tool State Machine</span>
+          <h2 class="chapter-title">两大提示词体系的哲学与工程逻辑对比（8 大核心维度）</h2>
+          <p class="chapter-desc">
+            左边是 Argon 在原版提示词下反复出现的真实翻车病症与底层成因，中间是 Google Antigravity 原版提示词的逻辑缺陷，右边是我们结合 Sourcegraph Amp (<code>deep.md.njk</code> / <code>oracle.ts</code> / <code>ju</code> 体检表) 与 Google Cloud《Argon 开发者指南》设计的替换逻辑。
+          </p>
+        </div>
+        <div class="toolbar" style="margin-bottom: 0;">
+          <div class="filter-group" id="philo-filter-bar">
+            <button class="filter-btn active" data-cat="ALL">全部维度 (8)</button>
+            <button class="filter-btn" data-cat="认识论与防幻觉">认识论与防幻觉</button>
+            <button class="filter-btn" data-cat="状态与交付拓扑">状态与交付拓扑</button>
+            <button class="filter-btn" data-cat="工具状态机与范围">工具状态机与范围</button>
+            <button class="filter-btn" data-cat="自主性与验证闭环">自主性与验证闭环</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- High-Level Paradigm Contrast Box -->
+      <div class="paradigm-box">
+        <div class="paradigm-half">
+          <div class="paradigm-kicker" style="color: var(--crimson-ink);">✕ Antigravity 原版设计哲学（平台耦合与仪式感驱动 · 50.7 KB）</div>
+          <div class="paradigm-title">把大模型当成「需要写周报、查归档、顺带推销 IDE 功能的文员」</div>
+          <ul class="paradigm-list">
+            <li>• <strong>重仪式、轻实证</strong>：花了 11,000+ 字节规定怎么往 <code>brain/&lt;id&gt;/</code> 写 Markdown 报告、怎么画轮播图和 `.url.json` 书签，却对“写代码前必须先读源码”只字未提；</li>
+            <li>• <strong>强制历史二手摘要前置</strong>：开局强迫模型先查本地 KI 知识库摘要（哪怕早已过时），而不是直接用 `grep_search` 看当前分支的真实代码；</li>
+            <li>• <strong>放任底座缺陷</strong>：完全忽略了 Gemini 4 Argon 底座预训练中“低置信度时强行估算（estimate if unsure）”与“工具调用前夹杂散文易崩溃”的模型脾气。</li>
+          </ul>
+        </div>
+        <div class="paradigm-half">
+          <div class="paradigm-kicker" style="color: var(--forest-ink);">✓ Amp × Argon 重构版设计哲学（实证闭环与最小自由度 · 4.6 KB）</div>
+          <div class="paradigm-title">把大模型当成「直奔源码、外科手术式修改、用测试说话的资深搭档」</div>
+          <ul class="paradigm-list">
+            <li>• <strong>显式挂起底座估算本能</strong>：第一条即点名宣布预训练的“估算规则”对代码库事实挂起（<code>SUSPENDED</code>），没在本会话 <code>read_file</code> 读过的文件一律禁止断言；</li>
+            <li>• <strong>零绕路直接交付</strong>：砍掉全部 `brain/` 外置报告与 KI 前置教条，所有结论、方案、Diff 直接在对话框交付，杜绝 <code>ArtifactMetadata</code> 路径报错；</li>
+            <li>• <strong>顺应 Argon 状态机脾气</strong>：严格执行 Clean Tool Turns（零散文前戏、禁冒号）、<code>edit_file</code> 3~5 行唯一锚点护栏、以及按爆炸半径匹配的验证闭环。</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 8-Dimension Full Ledger -->
+      <div class="ledger" id="ledger-container"></div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- CHAPTER 2: BINARY GO EMBED.FS SLOT SURGERY                         -->
+    <!-- ================================================================== -->
+    <section id="sec-binary" class="chapter">
+      <div class="chapter-head">
+        <div>
+          <span class="chapter-num">Section 02 · PE64 Go embed.FS Memory Layout & In-Place Patching</span>
+          <h2 class="chapter-title">本机二进制 Go <code>embed.FS</code> 模板槽位解剖表（支持交互式开关预览）</h2>
+          <p class="chapter-desc">
+            以下数据直接提取自本机 <code>language_server_windows_x64.exe</code> (IDE) 与 <code>language_server.exe</code> (CLI) 的只读数据段。点击任意槽位行可展开查看<strong>「原版内嵌模板 vs 手术替换后模板」</strong>的完整字节对照；勾选/取消右侧复选框可实时重算下方 §4 的完整提示词。
+          </p>
+        </div>
+        <div class="filter-group">
+          <button class="filter-btn" id="btn-preset-surgical">应用推荐手术方案</button>
+          <button class="filter-btn" id="btn-preset-stock">全部还原原版对比</button>
+        </div>
+      </div>
+
+      <!-- Proportional Memory Ribbon -->
+      <div class="memory-map-card">
+        <div class="memory-map-header">
+          <span id="ribbon-title-text">IDE 内核 Go embed.FS 模板池比例图（按真实字节宽度渲染，点击色块可定位槽位）</span>
+          <span id="ribbon-stats-text">原版总计 28,383 B → 手术后有效输出 4,807 B</span>
+        </div>
+        <div class="memory-ribbon" id="memory-ribbon-bar"></div>
+        <div class="memory-legend">
+          <span><i class="legend-dot" style="background: var(--navy-bg);"></i>KEEP：原样保留（<code>identity.tmpl</code> 网关校验头 + <code>ephemeral_message.tmpl</code>）</span>
+          <span><i class="legend-dot" style="background: var(--forest-bg);"></i>REPLACE：原位替换为高密度新规则（剩余字节用 Go 模板注释 <code>{{- /* ... */ -}}</code> 填充，PE 偏移 0 变动）</span>
+          <span><i class="legend-dot" style="background: var(--crimson-bg);"></i>STRIP：原位清零（渲染输出 0 字节，彻底拔除致幻与膨胀源）</span>
+        </div>
+      </div>
+
+      <!-- 13 Slots Table -->
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>Go embed.FS 模板槽位</th>
+              <th>PE64 文件偏移</th>
+              <th>原版容量</th>
+              <th>手术动作与有效字节</th>
+              <th>模板作用与处理依据</th>
+              <th style="text-align: center;">启用手术</th>
+            </tr>
+          </thead>
+          <tbody id="slots-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- Selected Slot Full Diff Box -->
+      <div class="slot-diff-box" id="slot-diff-drawer">
+        <div class="slot-diff-bar">
+          <span id="diff-drawer-title">当前检视槽位：system_prompts/guidelines.tmpl</span>
+          <span id="diff-drawer-meta">Offset: 44310582 · Capacity: 691 Bytes · Action: REPLACE (650B / 691B)</span>
+        </div>
+        <div class="slot-diff-cols">
+          <div class="slot-diff-pane">
+            <div class="col-kicker stock">
+              <span>● 原版二进制内嵌模板 (Stock .tmpl)</span>
+              <span id="diff-old-bytes">691 Bytes</span>
+            </div>
+            <pre class="code-excerpt stock" id="diff-old-content" style="max-height: 360px; overflow-y: auto;"></pre>
+          </div>
+          <div class="slot-diff-pane">
+            <div class="col-kicker surgical">
+              <span>● 手术后原位写入内容 (Patched .tmpl + Go Comment Padding)</span>
+              <span id="diff-new-bytes">650 Bytes 有效输出</span>
+            </div>
+            <pre class="code-excerpt surgical" id="diff-new-content" style="max-height: 360px; overflow-y: auto;"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- CHAPTER 3: NATIVE 19 TOOLS GUARDRAIL MATRIX                        -->
+    <!-- ================================================================== -->
+    <section id="sec-tools" class="chapter">
+      <div class="chapter-head">
+        <div>
+          <span class="chapter-num">Section 03 · 100% Native Tool Preservation & Safety Contracts</span>
+          <h2 class="chapter-title">反重力原生 19 个内置工具无损保留与防翻车护栏表</h2>
+          <p class="chapter-desc">
+            反重力的 19 个工具 Schema 由 Go 层的 Protobuf <code>FunctionDescriptor</code> 直接下发给模型，不依赖任何被清零的 <code>.tmpl</code>。但原版工具实现中暗藏了多处极易导致 Argon 报错或误改代码的陷阱，我们在新提示词中逐一注入了精确护栏。
+          </p>
+        </div>
+      </div>
+
+      <div class="spec-table-wrap">
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th style="width: 24%;">原生工具与参数签名</th>
+              <th style="width: 10%;">状态</th>
+              <th style="width: 33%;">原版实现中的隐藏陷阱 / 二进制报错点</th>
+              <th style="width: 33%;">新提示词注入的精准护栏条款</th>
+            </tr>
+          </thead>
+          <tbody id="tools-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- CHAPTER 4: FINAL PROMPT & PATCH SCRIPT WORKBENCH                   -->
+    <!-- ================================================================== -->
+    <section id="sec-deliverable" class="chapter">
+      <div class="chapter-head">
+        <div>
+          <span class="chapter-num">Section 04 · Ready-to-Use Replacement System Prompt & Binary Patcher</span>
+          <h2 class="chapter-title">最终组装 System Prompt 全文与一键热补丁执行台</h2>
+          <p class="chapter-desc">
+            左侧为根据上方槽位开关实时组装的最终 System Prompt（可直接复制用于反代覆写或自定义 Agent）；右侧为已生成在本机 <code>D:/workspace/just-agent/docs/antigravity-argon-prompt/patch-antigravity.mjs</code> 的二进制热补丁命令。
+          </p>
+        </div>
+      </div>
+
+      <div class="deliverable-grid">
+        <!-- Left: Full Assembled System Prompt -->
+        <div class="panel-box">
+          <div class="panel-bar">
+            <div>
+              <div class="panel-title" id="assembled-panel-title">组装后的完整生效 System Prompt (4.6 KB)</div>
+              <div style="font-size: 12px; color: var(--ink-secondary);">包含 EFFORT LEVEL 1.00 头 + 完整 identity 校验区 + 3 大重构核心块</div>
+            </div>
+            <button class="action-btn" id="btn-copy-prompt">复制完整 System Prompt</button>
+          </div>
+          <pre class="prompt-viewer" id="assembled-prompt-pre"></pre>
+        </div>
+
+        <!-- Right: CLI Patcher Commands & File Manifest -->
+        <div class="panel-box">
+          <div class="panel-bar">
+            <div>
+              <div class="panel-title">本机二进制热补丁脚本执行命令</div>
+              <div style="font-size: 12px; color: var(--ink-secondary);">自动定位 PE64 RVA 偏移，自动备份 <code>.bak</code>，支持随时无损还原</div>
+            </div>
+          </div>
+
+          <div class="cmd-block">
+            <div class="cmd-title">1. PowerShell 交互式数字键菜单（支持 GitHub 远程加载）</div>
+            <div class="cmd-desc">直接运行进入 <code>0-9</code> 数字键交互指引，自由组合提示词档位 (1-4) 与上下文解锁 (512K / 900K)：</div>
+            <div class="cmd-line">
+              <code>powershell -ExecutionPolicy Bypass -File D:/workspace/just-agent/docs/antigravity-argon-prompt/antigravity-patch.ps1</code>
+              <button class="mini-copy" data-copy="powershell -ExecutionPolicy Bypass -File D:/workspace/just-agent/docs/antigravity-argon-prompt/antigravity-patch.ps1">复制</button>
+            </div>
+          </div>
+
+          <div class="cmd-block">
+            <div class="cmd-title">2. 命令行 -- 参数快速直达（无需交互，一步到位）</div>
+            <div class="cmd-desc">提示词分 4 档（<code>1</code>:仅去广告 · <code>2</code>:原版最大精简 · <code>3</code>:全量重构 · <code>4</code>:2档+Amp/Argon防幻觉增强），上下文分 2 档（<code>512k</code> · <code>900k</code>）：</div>
+            <div class="cmd-line" style="margin-bottom: 6px;">
+              <code>.antigravity-patch.ps1 --prompt 4 --context 900k</code>
+              <button class="mini-copy" data-copy=".antigravity-patch.ps1 --prompt 4 --context 900k">复制</button>
+            </div>
+            <div class="cmd-line">
+              <code>.antigravity-patch.ps1 --prompt 3 --context 512k</code>
+              <button class="mini-copy" data-copy=".antigravity-patch.ps1 --prompt 3 --context 512k">复制</button>
+            </div>
+          </div>
+
+          <div class="cmd-block">
+            <div class="cmd-title">3. 单独恢复默认提示词 / 单独恢复默认上下文 / 全部还原</div>
+            <div class="cmd-desc">随时从 <code>.bak</code> 备份恢复提示词或还原 256K/128K 默认压缩阈值：</div>
+            <div class="cmd-line" style="margin-bottom: 6px;">
+              <code>.antigravity-patch.ps1 --prompt restore --context restore</code>
+              <button class="mini-copy" data-copy=".antigravity-patch.ps1 --prompt restore --context restore">复制</button>
+            </div>
+            <div class="cmd-line">
+              <code>.antigravity-patch.ps1 --restore</code>
+              <button class="mini-copy" data-copy=".antigravity-patch.ps1 --restore">复制</button>
+            </div>
+          </div>
+
+          <div class="cmd-block" style="background-color: var(--paper-subtle);">
+            <div class="cmd-title">提示词 4 档位 & 上下文 2 档位对照说明</div>
+            <ul style="list-style: none; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-secondary); display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">
+              <li>• <strong>[1档 · 仅去广告]</strong>：仅清空 <code>slash_commands.tmpl</code> 与 <code>plugins.tmpl</code>，其余原封不动</li>
+              <li>• <strong>[2档 · 原版最大精简]</strong>：清空 7 个冗余/brain/KI 槽位（省 22.2KB），核心规则保持官方原版</li>
+              <li>• <strong>[3档 · 全量重构版]</strong>：清空 7 槽 + 将 3 个核心槽全面替换为 Amp × Argon 重构版</li>
+              <li>• <strong>[4档 · 2档+防幻觉增强]</strong>：保留原版行文底子 + 注入 Amp 最佳实践与 Argon 防幻觉护栏</li>
+              <li>• <strong>[上下文 512k / 900k]</strong>：定位 <code>utils.GetCheckpointConfig</code> 中的 <code>0x3e800</code> (256K) 与 <code>0x1f400</code> (128K) 封顶指令，支持改为 <code>512,000</code> 或直接 <code>NOP</code> 释放完整 ~983K (1M) 物理窗口</li>
+            </ul>
+          </div></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. Replacement Payloads (Byte-verified for both CLI & IDE slots)
+    // =========================================================================
+    const NEW_GUIDELINES = `Follow these core engineering mandates at all times:
+- **Grounding Override (No Guessing)**: Your pretraining rule to estimate when uncertain is SUSPENDED for repository facts. Never make claims about files, symbols, or configs you have not read in this session. Read the defining source first.
+- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary. Preserve unrelated comments, docstrings, and formatting.
+- **Sandbox & Boundary Integrity**: Never bypass access controls, permission checks, or sandbox boundaries. If blocked, report the exact blocker and stop.`;
+
+    const NEW_FUNCTION_CALL = `- **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (never write "Let me read the file:" before a tool call).
+- **Parallel Discovery, Sequential Edits**: Batch independent read-only calls (\`read_file\`, \`grep_search\`, \`find_by_name\`, \`list_dir\`) in parallel in one turn. Include context lines in \`grep_search\` to avoid extra \`read_file\` turns.
+- **Reactive Wakeup (No Polling)**: Background \`run_command\` and \`invoke_subagent\` tasks wake you automatically on completion. NEVER poll \`command_status\` in a loop or run \`sleep\`.`;
+
+    const NEW_COMMUNICATION_STYLE = `## Intent & Autonomy
+- Distinguish **Inquiries** (questions, architecture reviews, root-cause analysis) from **Directives** (explicit requests to write, edit, or run code):
+  - For **Inquiries**: Deliver a grounded assessment directly in chat. Do NOT modify files until a Directive is given.
+  - For **Directives**: Execute end-to-end (focused discovery -> surgical edit -> targeted verification) without stopping mid-task to ask permission on reversible local steps. If critical requirements are genuinely ambiguous, call \`ask_question\` once with concise options (place the recommended option first with "(Recommended)").
+
+## Native Tool Contracts (Preserve All Built-in Tools)
+- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in your chat response. Do NOT write markdown summary files to \`brain/\` or pass \`ArtifactMetadata\` when editing workspace code files (passing \`ArtifactMetadata\` on non-artifact workspace paths causes a tool error), unless the user explicitly asks to create an artifact.
+- **\`edit_file\` Uniqueness Guard**: In \`edit_file\`, every occurrence of \`Target\` in the file is replaced. Always include 3-5 lines of unchanged surrounding context in \`Target\` so it matches exactly one unique location. Perform multiple edits to the same file sequentially across turns rather than in parallel. Use \`write_file\` only for new files or full rewrites.
+- **Dedicated Tools First**: Use \`read_file\`, \`edit_file\`, \`write_file\`, \`grep_search\`, \`find_by_name\`, and \`list_dir\` instead of shell \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`find\`.
+- **Subagent Delegation**: When delegating via \`invoke_subagent\`, frame open-ended research questions without presupposing the conclusion, and spot-check cited file ranges before relying on them.
+
+## Verification & Honesty
+- Scale verification with blast radius: run the narrowest test, typecheck, or build via \`run_command\` that proves your change works.
+- Never claim work is complete or tests pass when verification failed or was skipped. Before ending a Directive turn, ensure your final paragraph is a completed outcome, not an unexecuted promise ("I'll now...").
+
+## Output & Formatting Style
+- Lead with the conclusion or outcome in sentence 1. Keep prose under 4 lines (excluding code blocks, tables, or diagrams) unless asked for depth.
+- Link all files and symbols using \`[name](file:///absolute/path/to/file#L10-L20)\` (use forward slashes \`/\` on Windows).
+- Escape literal dollar signs as \`\\$\` or wrap prices/shell variables (\`$HOME\`, \`$1\`) in backticks so KaTeX does not misrender them as math.`;
+
+    // =========================================================================
+    // 2. Stock Templates Extracted from PE64 Binary
+    // =========================================================================
+    const STOCK_TEMPLATES = {
+      "system_prompts/identity.tmpl": `{{- /* LINT.IfChange(antigravity_identity) */ -}}
+You are Antigravity, a powerful agentic AI coding assistant designed by the Google Deepmind team working on Advanced Agentic Coding.
+You are {{if .IsAutonomous}}working for{{else}}pair programming with{{end}} a USER to solve their coding task. The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
+The USER will send you requests, which you must always prioritize addressing. User requests are enclosed within <USER_REQUEST> tags.
+{{- if .IsAutonomous}}
+The USER is not available to respond to questions or requests for approval. Work autonomously.
+{{- end}}
+{{- /* LINT.ThenChange(//depot/google3/cloud/developer_experience/cloudcode/pa/prediction_service/config/abuse.pi:antigravity_identity) */ -}}`,
+
+      "system_prompts/guidelines.tmpl": `{{- /*
+This template file specifies behavioral guidelines for the model.
+These are guidelines that may apply to a current generation of models, but are likely to be unnecessary in the future.
+*/ -}}
+Follow these behavioral guidelines at all times:
+{{/* Note(chmatthew, 2026-03-18): Added due to Opus 4.6 tendency to delete comments across a file. */ -}}
+- Maintain documentation integrity. Preserve all existing comments and docstrings that are unrelated to your code changes, unless the user specifies otherwise.
+{{/* Note(swiecki, 2026-10-21): Added to prevent agents from bypassing sandbox or environment boundaries when blocked. */ -}}
+- Never defeat or bypass an access control, permission check, credential requirement, network/proxy restriction, or sandbox/environment boundary - including writing to the state or processes such a check reads, spoofing identity, intercepting the check, probing undocumented local/host services, or modifying host, harness, or test infrastructure outside your task scope. Use documented, sanctioned paths only; if none of them work, you are blocked - report the error and stop.`,
+
+      "system_prompts/function_call.tmpl": `{{- /*
+This template file is used to specify the Batch Function Calling system prompt section.
+*/ -}}
+You support batch function calling. When you need to execute multiple operations that are independent of each other, you SHOULD call multiple tools in parallel in a single turn. This is much more efficient than calling them sequentially.
+
+Independent operations include:
+- Reading multiple files
+- Running multiple searches
+- Executing multiple independent commands
+- Checking status of multiple resources
+
+Do NOT batch operations if they depend on the output of a previous operation in the same batch.`,
+
+      "system_prompts/communication_style.tmpl": `{{- /*
+This template file is used to specify the Communication system prompt section.
+*/ -}}
+- Keep your responses concise.
+- Format your responses in github-style markdown.
+{{- if .CascadeConfig.GetPlannerConfig.GetSupportsLatexRendering }}
+- LaTeX math (KaTeX) is rendered only in your direct responses and markdown artifacts: inline with \\(...\\) or $...$, display with \\[...\\] or $$...$$ placed on its own line.
+- '$' opens inline math, so write a literal dollar as '\\$' or wrap it in backticks. Two unescaped '$' in the same paragraph turn everything between them into math.
+{{ end -}}
+{{- if .IsAutonomous}}
+- If you're unsure about details, make your best judgement rather than asking the user.
+{{- else}}
+- If you're unsure about the user's intent, ask for clarification rather than making assumptions.
+{{- end}}
+- You MUST create clickable links for all files and code symbols (classes, types, functions, structs). Use github style markdown links with the file:// scheme.`,
+
+      "system_prompts/artifacts.tmpl": `Artifacts are special markdown (.md) documents that you can create to present structured information to the user.
+All artifacts should be written to the artifact directory: \`{{ArtifactDirectoryPath}}\`. You do NOT need to create this directory yourself.
+
+# When to Use Artifacts
+**Use artifacts for:**
+- Extensive reports and analysis summaries
+- Persistent information you'll update over time (task lists, experiment logs)
+- Code changes formatted as diffs
+
+**After creating or updating an artifact**, DO NOT re-summarize the artifact contents in your response to the user. Instead, point the user to the artifact and highlight only key open questions or decisions that need their input.
+
+# Artifact Formatting Tips
+[... GitHub Alerts / Mermaid Diagrams / File Links / Carousels / URL Artifacts (.url.json) / Scratch directory rules (6,022B CLI / 8,715B IDE) ...]`,
+
+      "system_prompts/persistent_context.tmpl": `# Persistent Context
+You can retrieve information from past conversations via two mechanisms:
+1. **Knowledge Items (KIs)** — Curated, distilled knowledge on specific topics. Always check KIs first.
+2. **Conversation Logs** — Raw logs and artifacts from past conversations.
+
+### MANDATORY FIRST STEP: Check KI Summaries Before Any Research
+BEFORE performing ANY research, analysis, or creating documentation, you MUST:
+1. Review the KI summaries provided at the start of the conversation.
+2. Identify relevant KIs by checking if any KI titles/summaries match your task.
+3. Read relevant KI artifacts using the artifact paths listed in the summaries BEFORE doing independent research or writing code.`,
+
+      "system_prompts/knowledge_items.tmpl": `# Knowledge Items (KI) System
+### MANDATORY FIRST STEP: Check KI Summaries Before Any Research
+At the start of each conversation, you receive KI summaries with artifact paths.
+BEFORE performing ANY research, analysis, or creating documentation, you MUST review KI summaries and read relevant KI artifacts...`,
+
+      "system_prompts/planning_mode_artifacts.tmpl": `When in planning mode, you should create two special artifacts:
+# Implementation Plan
+Path: {{ArtifactDirectoryPath}}/implementation_plan.md
+**Purpose**: A detailed design document to present your technical implementation plan to the user for feedback and approval...`,
+
+      "system_prompts/planning_mode.tmpl": `You are in Planning Mode. Exercise judgement on whether a user's request warrants a plan before taking action.
+If you decide that a request warrants a plan: 1. Research (do not make source code changes) -> 2. Create Implementation Plan -> 3. Request User Approval...`,
+
+      "system_prompts/conversation_transcript.tmpl": `Transcripts are located directly at \`{{ SystemGeneratedLogsPath }}/transcript.jsonl\` (and \`transcript_full.jsonl\`).
+- Start with \`transcript.jsonl\` (compact). When \`truncated_fields\` is present, read only the specific corresponding line in \`transcript_full.jsonl\`.
+- Search subagents by grepping \`invoke_subagent\` in \`transcript.jsonl\`.`,
+
+      "system_prompts/slash_commands.tmpl": `Slash commands are user-facing shortcuts in the chat UI (e.g., typing \`/goal\` or \`/schedule\`) that automate complex workflows.
+You cannot execute these commands yourself. Your role is to recommend them to the user when they are a good fit for the task at hand (e.g., "You can use the \`/goal\` command to...").`,
+
+      "system_prompts/plugins.tmpl": `Plugins are bundles of customizations that extend your capabilities. They group skills, subagents, and configuration together for a specific feature or domain.
+Below is a list of installed plugins along with the skills and subagents they expose...`,
+
+      "system_prompts/skills.tmpl": `You can use specialized 'skills' to help you with complex tasks. Each skill has a name and a description listed below.
+If a skill seems relevant to your current task, you MUST read its \`SKILL.md\` instructions before proceeding...`,
+
+      "system_prompts/ephemeral_message.tmpl": `There will be an <EPHEMERAL_MESSAGE> appearing in the conversation at times. This is not coming from the user, but instead injected by the system as important information to pay attention to. 
+Do not respond to nor acknowledge those messages, but do follow them strictly.`
+    };
+
+    // =========================================================================
+    // 3. 8-Dimension Philosophy & Logic Comparison Data
+    // =========================================================================
+    const PHILOSOPHY_DATA = [
+      {
+        code: "01",
+        category: "认识论与防幻觉",
+        title: "认识论与代码库事实边界 (Epistemology & Grounding)",
+        slot: "guidelines.tmpl",
+        symptomTitle: "未读源码即 100% 自信捏造调用链",
+        symptomProse: "Google 在 Argon 底座元指令中硬编码了「do not abstain from low confidence or hedge (estimate if unsure)」。在通用问答里这能减少套话，但在代码库探索里，一旦模型没读全文件，就会凭预训练印象把不存在的函数名、配置项当成事实输出（即 Amp 体检表警告的 Confident wrong claims about real codebases）。",
+        stockTitle: "原版逻辑：零代码库实证约束",
+        stockProse: "整份 50.7KB 提示词中，关于写代码的 <guidelines> 仅有 2 条（保留注释、不越狱沙箱），没有任何一句要求模型“必须先读源码再下判断”，任由底座的估算本能失控。",
+        stockCode: `// Stock guidelines.tmpl (仅此 2 条，无任何 Grounding 要求)\n- Maintain documentation integrity. Preserve all existing comments...\n- Never defeat or bypass an access control, permission check...`,
+        surgicalTitle: "重构逻辑：显式点名挂起底座“估算规则”",
+        surgicalProse: "直接针对 Argon 预训练钢印下药：在 <guidelines> 首条点名宣布预训练的“不确定时估算”规则对当前代码库事实严格挂起（SUSPENDED），未在本会话亲自 read_file 的文件一律视为未知。",
+        surgicalCode: `- **Grounding Override (No Guessing)**: Your pretraining rule to estimate when uncertain is SUSPENDED for repository facts. Never make claims about files, symbols, or configs you have not read in this session. Read the defining source first.`
+      },
+      {
+        code: "02",
+        category: "状态与交付拓扑",
+        title: "状态与交付物拓扑 (Chat-Direct vs Brain Artifact Detour)",
+        slot: "artifacts.tmpl (清零) + communication_style.tmpl",
+        symptomTitle: "不回聊天框、狂写 brain/ 目录与工具路径报错",
+        symptomProse: "1) 问它一个架构问题或代码审查，它不在聊天框直接回答，而是调 write_file 往 ~/.gemini/antigravity/brain/<id>/ 写报告，再回一句“请看 artifact”；\n2) 改普通业务代码时顺手传了 ArtifactMetadata 参数，直接触发 language_server @58777383 报错：'ArtifactMetadata was provided but path is not a valid artifact path'。",
+        stockTitle: "原版逻辑：强制外置报告 + 严禁在聊天框总结",
+        stockProse: "原版 artifacts.tmpl (8,715B) 强迫模型把所有分析报告、任务列表、代码 Diff 写进 brain/ 目录，甚至连 URL 都要单独建 .url.json 文件，并明令禁止写完后在聊天框里向用户复述内容。",
+        stockCode: `// Stock artifacts.tmpl\nAll artifacts should be written to: {{ArtifactDirectoryPath}}.\nAfter creating or updating an artifact, DO NOT re-summarize the artifact contents in your response to the user.`,
+        surgicalTitle: "重构逻辑：物理清零 artifacts.tmpl + 直接对话流交付",
+        surgicalProse: "将 artifacts.tmpl 与 planning_mode_artifacts.tmpl 原位清零（0 Bytes），并在 communication_style.tmpl 中锁死：所有解释、方案、Diff 直接在对话中交付；编辑工作区代码时严禁传 ArtifactMetadata。",
+        surgicalCode: `- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in your chat response. Do NOT write markdown summary files to \`brain/\` or pass \`ArtifactMetadata\` when editing workspace code files...`
+      },
+      {
+        code: "03",
+        category: "自主性与验证闭环",
+        title: "意图分流与自主执行闭环 (Inquiry vs Directive Routing)",
+        slot: "communication_style.tmpl",
+        symptomTitle: "讨论阶段手痒乱改代码 vs 执行阶段每步停下反问",
+        symptomProse: "Argon 动手欲极强，有时用户只是问“为什么这里会报错”，它不经讨论就直接冲上去改文件；但一旦真让它干多步重构，它又受原版提示词影响，每走一步就停下来问“要不要我继续？”。",
+        stockTitle: "原版逻辑：模糊意图被动反问偏置",
+        stockProse: "原版 communication_style.tmpl 规定“如果不确定用户意图，先停下来要求澄清而不是做假设”，且全文没有区分“提问探讨（Inquiry）”与“修改指令（Directive）”的边界。",
+        stockCode: `// Stock communication_style.tmpl\n- If you're unsure about the user's intent, ask for clarification rather than making assumptions.`,
+        surgicalTitle: "重构逻辑：Inquiry / Directive 二分法 + 端到端闭环",
+        surgicalProse: "融合 Google Gemini CLI 二分法与 Amp rush/deep 闭环纪律：对 Inquiries（提问/架构评审）只输出实证分析，严禁改文件；对 Directives（明确指令）一路走完「聚焦搜索 -> 最小编辑 -> 窄域验证」，不在可逆本地步骤上停下求批准。",
+        surgicalCode: `- Distinguish **Inquiries** (questions, architecture reviews, root-cause analysis) from **Directives** (explicit requests to write, edit, or run code):\n  - For **Inquiries**: Deliver a grounded assessment directly in chat. Do NOT modify files.\n  - For **Directives**: Execute end-to-end without stopping mid-task on reversible local steps.`
+      },
+      {
+        code: "04",
+        category: "工具状态机与范围",
+        title: "改动范围预算与 edit_file 唯一性护栏 (Code-Judo & Uniqueness)",
+        slot: "guidelines.tmpl + communication_style.tmpl",
+        symptomTitle: "65K 输出上限引发的整文件重写 & 同名块误替换",
+        symptomProse: "1) Argon 单次流式输出上限高达 65,536 Tokens，完全没有输出长度焦虑，改 3 行 Bug 顺手把整个文件格式化或重写（即 Amp 警告的 Oversized fixes）；\n2) 反重力原生 edit_file 的逻辑是“若 Target 在文件中出现多次则全部替换”，极易误伤同名结构。",
+        stockTitle: "原版逻辑：零 Diff 预算 + 全局替换裸奔",
+        stockProse: "原版提示词既没有限制单次改动的行数预算，也没有要求模型在使用 edit_file 时为 Target 提供足够的上下游未修改行来锁定唯一位置。",
+        stockCode: `// Stock edit_file tool specification:\n"If Target appears multiple times in the file, every occurrence is replaced"`,
+        surgicalTitle: "重构逻辑：Oracle 代码柔道 (Code-Judo) + 3~5 行唯一锚点",
+        surgicalProse: "引入 Amp @amp/oracle 的 Code-Judo 思想（优先靠删减分支/Wrapper 解决问题，把新增复杂度视为有罪）与 edit_file 唯一性护栏：强制 Target 携带 3~5 行未修改上下文确保全局唯一命中，同文件多处修改跨轮次串行执行。",
+        surgicalCode: `- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases.\n- **\`edit_file\` Uniqueness Guard**: Always include 3-5 lines of unchanged surrounding context in \`Target\` so it matches exactly one unique location.`
+      },
+      {
+        code: "05",
+        category: "工具状态机与范围",
+        title: "工具状态机卫生与异步唤醒 (Clean Tool Turns & Reactive Wakeup)",
+        slot: "function_call.tmpl",
+        symptomTitle: "长循环（20+ 轮）中 FunctionCall 失步 & 死循环轮询",
+        symptomProse: "1) Amp 体检表指出 Argon 存在 'Tool-call reliability in long loops' 问题；Google Cloud 官方《Argon 开发者指南》证实：Argon 在调工具前如果夹杂非结构化散文或冒号引导语（如 'Let me read:'），多轮后极易解析失步；\n2) 启动后台命令后反复调 command_status 轮询。",
+        stockTitle: "原版逻辑：仅泛泛提倡并发，未约束调工具前散文",
+        stockProse: "原版 function_call.tmpl 只写了一段鼓励并发调工具的常识说明，没有针对 Argon 状态机的散文前戏禁令，也没有教模型在 grep_search 时顺带取上下文以减少轮次。",
+        stockCode: `// Stock function_call.tmpl\nYou support batch function calling. When you need to execute multiple operations that are independent of each other, you SHOULD call multiple tools in parallel...`,
+        surgicalTitle: "重构逻辑：零散文前戏/禁冒号 + 搜读合一 + 禁轮询",
+        surgicalProse: "在 function_call.tmpl 中强制：1) 直接发出工具调用，禁止散文铺垫或末尾冒号；2) grep_search 顺带获取上下文行以省去单独 read_file 的额外轮次；3) 后台命令与子代理完成自动唤醒，严禁循环轮询 command_status 或跑 sleep。",
+        surgicalCode: `- **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons.\n- **Parallel Discovery, Sequential Edits**: Include context lines in \`grep_search\` to avoid extra \`read_file\` turns.\n- **Reactive Wakeup (No Polling)**: NEVER poll \`command_status\` in a loop or run \`sleep\`.`
+      },
+      {
+        code: "06",
+        category: "状态与交付拓扑",
+        title: "开局检索效率与上下文经济学 (Source of Truth vs KI Bloat)",
+        slot: "persistent_context.tmpl + knowledge_items.tmpl (清零)",
+        symptomTitle: "开局先花 2 轮盲查过时 KI 文档，每轮背负 9.4KB 说明",
+        symptomProse: "每次开启新对话，模型都被迫先去检查并读取本地 KI（Knowledge Items）历史总结文件。如果 KI 记录的是上个月旧分支的架构，模型就会被旧总结带偏，且白白浪费开局 1~2 个完整工具轮次。",
+        stockTitle: "原版逻辑：MANDATORY FIRST STEP 强制查 KI",
+        stockProse: "原版 persistent_context.tmpl (3,695B) + knowledge_items.tmpl (2,594B) + conversation_transcript.tmpl (3,129B) 规定：在做任何研究或写代码前，必须先读取本地 KI 摘要文件。",
+        stockCode: `// Stock persistent_context.tmpl\n### MANDATORY FIRST STEP: Check KI Summaries Before Any Research\nBEFORE performing ANY research, analysis, or creating documentation, you MUST: 1. Review KI summaries...`,
+        surgicalTitle: "重构逻辑：物理清零 3 个历史说明模板，直奔真实源码",
+        surgicalProse: "将 persistent_context.tmpl、knowledge_items.tmpl、conversation_transcript.tmpl 全部原位清零（净省 9,418 Bytes）。遵循 Amp“当前代码库即唯一事实源”原则，开局第 1 轮直接并发搜索真实源码。",
+        surgicalCode: `// Stripped 3 templates -> 0 Bytes\n// 省去开局盲查过时 KI 的 1~2 个空转轮次，每轮对话减少 ~2,500 Tokens 静态重算开销。`
+      },
+      {
+        code: "07",
+        category: "状态与交付拓扑",
+        title: "宿主营销与斜杠命令噪音 (Platform Promotional Noise)",
+        slot: "slash_commands.tmpl + plugins.tmpl (清零)",
+        symptomTitle: "回复末尾频繁推销 /goal、/boost、/teamwork 与商业插件",
+        symptomProse: "当你让模型分析一个复杂模块或修 Bug 时，它经常在回复里插播广告：“你可以使用 /goal 或 /teamwork 命令来启动多智能体，或者去插件市场安装 SonarQube 插件”。",
+        stockTitle: "原版逻辑：要求 Agent 主动扮演 UI 功能推销员",
+        stockProse: "原版 slash_commands.tmpl (609B) 与 plugins.tmpl (1,114B) 明确要求模型：当任务契合时，主动在回复中鼓励用户探索并触发斜杠命令与插件。",
+        stockCode: `// Stock slash_commands.tmpl\nYour role is to recommend them to the user when they are a good fit for the task at hand, encouraging the user to explore and trigger them.`,
+        surgicalTitle: "重构逻辑：彻底清零营销模板，保持纯粹工具感",
+        surgicalProse: "将 slash_commands.tmpl 与 plugins.tmpl 原位清零（0 Bytes）。模型不再推销任何 UI 快捷键或插件市场，专注解决工程问题。",
+        surgicalCode: `// slash_commands.tmpl -> 0 Bytes\n// plugins.tmpl -> 0 Bytes`
+      },
+      {
+        code: "08",
+        category: "自主性与验证闭环",
+        title: "爆炸半径验证与子代理去偏见 (Blast-Radius Verification & Debiasing)",
+        slot: "communication_style.tmpl",
+        symptomTitle: "改完不测就交差 & 派发子代理时预设结论引发确认偏见",
+        symptomProse: "1) 改完代码不跑单测或 typecheck 就自信满满声称“已修复”；\n2) 调用 invoke_subagent 时把自己的猜测写进问题（如“去证明 X 函数导致了内存泄漏”），子代理顺着猜测找伪证返回。",
+        stockTitle: "原版逻辑：缺乏验证闭环与子代理中立提问纪律",
+        stockProse: "原版 guidelines.tmpl 中没有任何代码修改后的验证要求，也没有针对 invoke_subagent 提问方式的去偏见约束。",
+        stockCode: `// Stock guidelines.tmpl 中无任何测试验证或子代理去偏见条款。`,
+        surgicalTitle: "重构逻辑：爆炸半径正比验证 + 开放式委派抽查 + 末尾自检锁",
+        surgicalProse: "融合 Amp deep.md.njk、oracle.ts 与 ZCode 末尾自检锁：1) 验证力度与爆炸半径匹配；2) 调 invoke_subagent 严禁预设结论并抽查返回的引用行号；3) 回合结束前自检最后一段，严禁停留在未执行的承诺（'I'll now...'）。",
+        surgicalCode: `- **Subagent Delegation**: Frame open-ended research questions without presupposing the conclusion, and spot-check cited file ranges.\n- **Verification & Honesty**: Scale verification with blast radius... ensure your final paragraph is a completed outcome, not an unexecuted promise.`
+      }
+    ];
+
+    // =========================================================================
+    // 4. Binary Go embed.FS 13 Slots Data
+    // =========================================================================
+    const BINARY_SLOTS = [
+      {
+        name: "system_prompts/identity.tmpl",
+        shortName: "identity.tmpl",
+        ideOffset: 44312663,
+        ideLen: 698,
+        cliOffset: 59179586,
+        cliLen: 821,
+        defaultAction: "KEEP",
+        locked: true,
+        newPayload: STOCK_TEMPLATES["system_prompts/identity.tmpl"],
+        purpose: "Google cloudcode-pa 网关 abuse.pi:antigravity_identity 强校验区（100% 原样保留）"
+      },
+      {
+        name: "system_prompts/guidelines.tmpl",
+        shortName: "guidelines.tmpl",
+        ideOffset: 44310582,
+        ideLen: 691,
+        cliOffset: 59329533,
+        cliLen: 1292,
+        defaultAction: "REPLACE",
+        newPayload: NEW_GUIDELINES,
+        purpose: "注入 Grounding Override（禁止不读代码瞎猜）、Code-Judo 最小改动与沙箱边界铁律"
+      },
+      {
+        name: "system_prompts/function_call.tmpl",
+        shortName: "function_call.tmpl",
+        ideOffset: 44293916,
+        ideLen: 605,
+        cliOffset: 59105267,
+        cliLen: 605,
+        defaultAction: "REPLACE",
+        newPayload: NEW_FUNCTION_CALL,
+        purpose: "注入 Clean Tool Turns（零散文前戏/禁冒号）、搜读合一与后台任务自动唤醒禁轮询"
+      },
+      {
+        name: "system_prompts/communication_style.tmpl",
+        shortName: "communication_style.tmpl",
+        ideOffset: 44550799,
+        ideLen: 2792,
+        cliOffset: 59800373,
+        cliLen: 3388,
+        defaultAction: "REPLACE",
+        newPayload: NEW_COMMUNICATION_STYLE,
+        purpose: "注入 Inquiry/Directive 二分法、19 个原生工具防翻车护栏、爆炸半径验证与输出规范"
+      },
+      {
+        name: "system_prompts/artifacts.tmpl",
+        shortName: "artifacts.tmpl",
+        ideOffset: 44952722,
+        ideLen: 8715,
+        cliOffset: 60219867,
+        cliLen: 6022,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "原版逼迫模型往 brain/<id>/ 写报告文件且禁止在聊天框总结的头号膨胀源"
+      },
+      {
+        name: "system_prompts/persistent_context.tmpl",
+        shortName: "persistent_context.tmpl",
+        ideOffset: 44658491,
+        ideLen: 3695,
+        cliOffset: 59859780,
+        cliLen: 3695,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "原版强制开局第一步必须先查本地 KI 知识库摘要的教条指令"
+      },
+      {
+        name: "system_prompts/conversation_transcript.tmpl",
+        shortName: "conversation_transcript.tmpl",
+        ideOffset: 44591618,
+        ideLen: 3129,
+        cliOffset: 59471395,
+        cliLen: 1885,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "原版冗长的 .system_generated/logs/transcript.jsonl 字段说明文档"
+      },
+      {
+        name: "system_prompts/knowledge_items.tmpl",
+        shortName: "knowledge_items.tmpl",
+        ideOffset: 44518695,
+        ideLen: 2594,
+        cliOffset: 0,
+        cliLen: 0,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "IDE 端重复注入的第二份 KI 知识库强制前置检查说明"
+      },
+      {
+        name: "system_prompts/planning_mode_artifacts.tmpl",
+        shortName: "planning_mode_artifacts.tmpl",
+        ideOffset: 44503794,
+        ideLen: 2355,
+        cliOffset: 0,
+        cliLen: 0,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "IDE 端强制将计划写入 brain/<id>/implementation_plan.md 的耦合模板"
+      },
+      {
+        name: "system_prompts/plugins.tmpl",
+        shortName: "plugins.tmpl",
+        ideOffset: 44371074,
+        ideLen: 1114,
+        cliOffset: 59278100,
+        cliLen: 1114,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "原版插件目录结构说明与未安装插件推销引导"
+      },
+      {
+        name: "system_prompts/slash_commands.tmpl",
+        shortName: "slash_commands.tmpl",
+        ideOffset: 44295735,
+        ideLen: 609,
+        cliOffset: 59108300,
+        cliLen: 609,
+        defaultAction: "STRIP",
+        newPayload: "",
+        purpose: "原版要求模型主动向用户推销 /goal、/schedule、/boost 的营销模板"
+      },
+      {
+        name: "system_prompts/skills.tmpl",
+        shortName: "skills.tmpl",
+        ideOffset: 44439210,
+        ideLen: 1805,
+        cliOffset: 59449712,
+        cliLen: 1757,
+        defaultAction: "KEEP",
+        newPayload: STOCK_TEMPLATES["system_prompts/skills.tmpl"],
+        purpose: "本地 SKILL.md 扩展加载器（默认保留；勾选右侧框或传 --no-skills 可一并清零）"
+      },
+      {
+        name: "system_prompts/ephemeral_message.tmpl",
+        shortName: "ephemeral_message.tmpl",
+        ideOffset: 44223798,
+        ideLen: 271,
+        cliOffset: 58978474,
+        cliLen: 271,
+        defaultAction: "KEEP",
+        locked: true,
+        newPayload: STOCK_TEMPLATES["system_prompts/ephemeral_message.tmpl"],
+        purpose: "处理宿主运行期注入的 <EPHEMERAL_MESSAGE> 临时系统指令（仅 271B，保留）"
+      }
+    ];
+
+    // =========================================================================
+    // 5. Native 19 Tools Data
+    // =========================================================================
+    const TOOLS_DATA = [
+      {
+        name: "edit_file({ Path, Target, Replacement, ArtifactMetadata? })",
+        hazard: "1) 原生实现会将文件中所有匹配 Target 的位置全部替换；2) 若对普通工作区代码传入 ArtifactMetadata，language_server @58777383 直接抛 'not a valid artifact path' 异常。",
+        guard: "注入 edit_file Uniqueness Guard：强制 Target 包含 3~5 行未修改上下文以锁定唯一位置；严禁在工作区代码文件上传入 ArtifactMetadata；同文件多处修改跨轮次串行执行。"
+      },
+      {
+        name: "write_file({ Path, Content, ArtifactMetadata? })",
+        hazard: "受原版 artifacts.tmpl 诱导，模型极易调 write_file 往 ~/.gemini/antigravity/brain/<id>/ 写长篇报告和 .url.json 书签，拒绝在聊天框直接回复。",
+        guard: "物理清零 artifacts.tmpl，并在 Direct Chat Delivery 条款中锁死：write_file 仅用于创建工程新文件或全量重写，严禁写 brain/ 总结文件。"
+      },
+      {
+        name: "read_file({ Path, StartLine?, EndLine?, ByteOffset? })",
+        hazard: "单次上限 800 行 / 46,080 字节；Argon 常因底座 'estimate if unsure' 本能在未调 read_file 时直接凭记忆瞎编代码。",
+        guard: "在 guidelines.tmpl 第 1 条锁死 Grounding Override：未在本会话 read_file 的文件严禁下断言；优先用专用 read_file 而非 shell cat/head/tail。"
+      },
+      {
+        name: "grep_search / find_by_name / list_dir",
+        hazard: "模型常先跑不含上下文的搜索，再额外花一整轮调 read_file 查看周围几行，导致 Turn 数量翻倍。",
+        guard: "在 function_call.tmpl 中规定：只读搜索并发批处理，且 grep_search 顺带获取上下文行，省去额外 read_file 轮次。"
+      },
+      {
+        name: "run_command / command_status / send_command_input",
+        hazard: "后台命令启动后，模型极易在循环中反复调 command_status 轮询或跑 sleep 空耗轮次。",
+        guard: "保留 step_strings/run_command.tmpl，并在 function_call.tmpl 中注入 Reactive Wakeup：后台命令结束自动唤醒，严禁循环轮询 command_status 或跑 sleep。"
+      },
+      {
+        name: "invoke_subagent / send_message",
+        hazard: "主模型派发子代理时喜欢把自己的猜测塞进 Task 描述（预设结论），子代理顺着猜测返回伪证。",
+        guard: "引入 Amp @amp/oracle 铁律：委派 invoke_subagent 时必须使用开放式、不预设结论的提问，并对返回的引用行号做抽查核实。"
+      },
+      {
+        name: "ask_question",
+        hazard: "原版 'unsure -> ask clarification' 导致模型在可逆的小细节上频繁弹窗打断开发心流。",
+        guard: "仅当核心需求存在真实歧义或涉及不可逆操作时才调用一次 ask_question，且必须将推荐项置顶并标注 (Recommended)。"
+      },
+      {
+        name: "task_boundary / notify_user / webview_browser / MCP 工具",
+        hazard: "调工具前若输出冗长散文或冒号引导语（'Let me check:'），Argon 在长多轮下易发生 FunctionCall 解析退化。",
+        guard: "强制 Clean Tool Turns：直接发出工具调用，严禁在工具调用前写散文铺垫或冒号。"
+      }
+    ];
+
+    // =========================================================================
+    // 6. State & Rendering Logic
+    // =========================================================================
+    let currentKernel = "ide";
+    let currentCat = "ALL";
+    let selectedSlotName = "system_prompts/guidelines.tmpl";
+
+    const surgicalState = {};
+    BINARY_SLOTS.forEach(s => {
+      surgicalState[s.name] = s.defaultAction !== "KEEP";
+    });
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderLedger() {
+      const container = document.getElementById("ledger-container");
+      const list = currentCat === "ALL"
+        ? PHILOSOPHY_DATA
+        : PHILOSOPHY_DATA.filter(d => d.category === currentCat);
+
+      container.innerHTML = list.map(item => `
+        <article class="ledger-item">
+          <div class="ledger-header">
+            <div class="ledger-title-group">
+              <span class="ledger-code">DIM-${item.code}</span>
+              <h3 class="ledger-title">${escapeHtml(item.title)}</h3>
+            </div>
+            <div class="ledger-meta">
+              <span>分类：${escapeHtml(item.category)}</span>
+              <span>·</span>
+              <span>对应二进制槽位：<code>${escapeHtml(item.slot)}</code></span>
+            </div>
+          </div>
+          <div class="ledger-grid">
+            <div class="ledger-col">
+              <div>
+                <div class="col-kicker symptom">
+                  <span>▲ 原版典型症状与底层根因</span>
+                </div>
+                <div class="col-heading">${escapeHtml(item.symptomTitle)}</div>
+                <p class="col-prose">${escapeHtml(item.symptomProse).replace(/\n/g, "<br/>")}</p>
+              </div>
+            </div>
+            <div class="ledger-col">
+              <div>
+                <div class="col-kicker stock">
+                  <span>✕ Google Antigravity 原版设计</span>
+                </div>
+                <div class="col-heading">${escapeHtml(item.stockTitle)}</div>
+                <p class="col-prose">${escapeHtml(item.stockProse)}</p>
+              </div>
+              <pre class="code-excerpt stock">${escapeHtml(item.stockCode)}</pre>
+            </div>
+            <div class="ledger-col">
+              <div>
+                <div class="col-kicker surgical">
+                  <span>✓ Amp × Argon 外科手术重构版</span>
+                </div>
+                <div class="col-heading">${escapeHtml(item.surgicalTitle)}</div>
+                <p class="col-prose">${escapeHtml(item.surgicalProse)}</p>
+              </div>
+              <pre class="code-excerpt surgical">${escapeHtml(item.surgicalCode)}</pre>
+            </div>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderBinarySection() {
+      let stockTotal = 0;
+      let currentTotal = 0;
+      let strippedBytes = 0;
+      let strippedCount = 0;
+
+      const activeSlots = BINARY_SLOTS.filter(s => {
+        const cap = currentKernel === "ide" ? s.ideLen : s.cliLen;
+        return cap > 0;
+      });
+
+      activeSlots.forEach(s => {
+        const cap = currentKernel === "ide" ? s.ideLen : s.cliLen;
+        stockTotal += cap;
+        const isSurg = surgicalState[s.name];
+
+        if (!isSurg || (s.defaultAction === "KEEP" && s.name !== "system_prompts/skills.tmpl")) {
+          currentTotal += cap;
+        } else if (s.defaultAction === "STRIP" || (s.name === "system_prompts/skills.tmpl" && isSurg)) {
+          strippedBytes += cap;
+          strippedCount += 1;
+        } else if (s.defaultAction === "REPLACE") {
+          const newLen = new TextEncoder().encode(s.newPayload).length;
+          currentTotal += newLen;
+          strippedBytes += Math.max(0, cap - newLen);
+        }
+      });
+
+      const pct = stockTotal > 0 ? Math.round(((stockTotal - currentTotal) / stockTotal) * 1000) / 10 : 0;
+      const savedTokens = Math.round((stockTotal - currentTotal) / 3.8);
+
+      // Update Top Metrics
+      document.getElementById("metric-size-text").textContent = `${(currentTotal / 1024).toFixed(1)} KB`;
+      document.getElementById("metric-pct-text").textContent = `-${pct}% 模板载荷`;
+      document.getElementById("metric-saved-text").textContent = `每轮对话净省 ~${savedTokens.toLocaleString()} 静态重算 Tokens`;
+      document.getElementById("metric-strip-count").textContent = `${strippedCount} 个 .tmpl 清零`;
+      document.getElementById("metric-strip-bytes").textContent = `-${strippedBytes.toLocaleString()} Bytes`;
+
+      // Update Memory Ribbon
+      document.getElementById("ribbon-title-text").textContent =
+        `${currentKernel.toUpperCase()} 内核 Go embed.FS 模板池比例图（按真实字节宽度渲染，点击色块可检视对应槽位）`;
+      document.getElementById("ribbon-stats-text").textContent =
+        `原版模板池 ${stockTotal.toLocaleString()} B → 当前有效载荷 ${currentTotal.toLocaleString()} B`;
+
+      const ribbonEl = document.getElementById("memory-ribbon-bar");
+      ribbonEl.innerHTML = activeSlots.map(s => {
+        const cap = currentKernel === "ide" ? s.ideLen : s.cliLen;
+        const widthPct = ((cap / stockTotal) * 100).toFixed(2);
+        const isSurg = surgicalState[s.name];
+        let modeClass = "ribbon-KEEP";
+        if (isSurg) {
+          if (s.defaultAction === "STRIP" || s.name === "system_prompts/skills.tmpl") modeClass = "ribbon-STRIP";
+          else if (s.defaultAction === "REPLACE") modeClass = "ribbon-REPLACE";
+        }
+        const label = cap > 1400 ? s.shortName.replace(".tmpl", "") : "";
+        return `<div class="ribbon-seg ${modeClass}" style="width: ${widthPct}%;" data-slot="${s.name}" title="${s.shortName} (${cap} Bytes)">${label}</div>`;
+      }).join("");
+
+      ribbonEl.querySelectorAll(".ribbon-seg").forEach(seg => {
+        seg.addEventListener("click", () => {
+          selectedSlotName = seg.dataset.slot;
+          renderBinarySection();
+        });
+      });
+
+      // Update Slots Table
+      const tbody = document.getElementById("slots-tbody");
+      tbody.innerHTML = activeSlots.map(s => {
+        const off = currentKernel === "ide" ? s.ideOffset : s.cliOffset;
+        const cap = currentKernel === "ide" ? s.ideLen : s.cliLen;
+        const isSurg = surgicalState[s.name];
+        const isSelected = s.name === selectedSlotName;
+        const newLen = s.defaultAction === "REPLACE" ? new TextEncoder().encode(s.newPayload).length : 0;
+
+        let badgeHtml = `<span class="spec-tag tag-navy">KEEP (${cap} B)</span>`;
+        if (isSurg) {
+          if (s.defaultAction === "STRIP" || s.name === "system_prompts/skills.tmpl") {
+            badgeHtml = `<span class="spec-tag tag-crimson">STRIP → 0 B (-${cap} B)</span>`;
+          } else if (s.defaultAction === "REPLACE") {
+            badgeHtml = `<span class="spec-tag tag-forest">REPLACE → ${newLen} B / ${cap} B</span>`;
+          }
+        } else if (s.defaultAction !== "KEEP") {
+          badgeHtml = `<span class="spec-tag" style="background: var(--paper-subtle); color: var(--ink-secondary);">未启用手术 (原版 ${cap} B)</span>`;
+        }
+
+        return `
+          <tr class="clickable-row ${isSelected ? "selected-row" : ""}" data-slot="${s.name}">
+            <td><code style="font-family: var(--font-mono); font-weight: 600;">${s.shortName}</code></td>
+            <td style="font-family: var(--font-mono); color: var(--ink-secondary);">${off}</td>
+            <td style="font-family: var(--font-mono); font-weight: 600;">${cap.toLocaleString()} B</td>
+            <td>${badgeHtml}</td>
+            <td style="color: var(--ink-secondary);">${escapeHtml(s.purpose)}</td>
+            <td style="text-align: center;" onclick="event.stopPropagation();">
+              <input
+                type="checkbox"
+                class="slot-check"
+                data-check-slot="${s.name}"
+                ${isSurg ? "checked" : ""}
+                ${s.locked ? "disabled title='服务端指纹校验锁定槽位'" : ""}
+              />
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      tbody.querySelectorAll("tr.clickable-row").forEach(row => {
+        row.addEventListener("click", () => {
+          selectedSlotName = row.dataset.slot;
+          renderBinarySection();
+        });
+      });
+
+      tbody.querySelectorAll("input.slot-check").forEach(chk => {
+        chk.addEventListener("change", (e) => {
+          const name = e.target.dataset.checkSlot;
+          surgicalState[name] = e.target.checked;
+          renderBinarySection();
+        });
+      });
+
+      // Update Diff Drawer
+      const activeSlot = activeSlots.find(s => s.name === selectedSlotName) || activeSlots[0];
+      const cap = currentKernel === "ide" ? activeSlot.ideLen : activeSlot.cliLen;
+      const off = currentKernel === "ide" ? activeSlot.ideOffset : activeSlot.cliOffset;
+      const isSurg = surgicalState[activeSlot.name];
+      const newLen = activeSlot.defaultAction === "REPLACE" ? new TextEncoder().encode(activeSlot.newPayload).length : 0;
+
+      document.getElementById("diff-drawer-title").textContent = `当前检视槽位：${activeSlot.name}`;
+      document.getElementById("diff-drawer-meta").textContent = `PE64 File Offset: ${off} · Slot Capacity: ${cap} Bytes · Default Action: ${activeSlot.defaultAction}`;
+      document.getElementById("diff-old-bytes").textContent = `${cap} Bytes`;
+      document.getElementById("diff-old-content").textContent = STOCK_TEMPLATES[activeSlot.name] || "";
+
+      if (!isSurg || (activeSlot.defaultAction === "KEEP" && activeSlot.name !== "system_prompts/skills.tmpl")) {
+        document.getElementById("diff-new-bytes").textContent = `${cap} Bytes (保持原版未改动)`;
+        document.getElementById("diff-new-content").textContent = STOCK_TEMPLATES[activeSlot.name] || "";
+      } else if (activeSlot.defaultAction === "STRIP" || activeSlot.name === "system_prompts/skills.tmpl") {
+        document.getElementById("diff-new-bytes").textContent = `0 Bytes 有效输出 (${cap} Bytes Go 注释填充)`;
+        document.getElementById("diff-new-content").textContent = `{{- /* stripped ${cap} bytes -> renders 0 bytes in prompt */ -}}`;
+      } else {
+        const pad = cap - newLen;
+        document.getElementById("diff-new-bytes").textContent = `${newLen} Bytes 有效输出 + ${pad} Bytes Go 注释填充`;
+        document.getElementById("diff-new-content").textContent = activeSlot.newPayload;
+      }
+
+      renderAssembledPrompt(currentTotal);
+    }
+
+    function renderAssembledPrompt(currentTotalBytes) {
+      const blocks = [
+        `SPECIAL INSTRUCTION: think silently if needed. EFFORT LEVEL: 1.00.`
+      ];
+
+      const pushSlot = (tag, slotName) => {
+        const slot = BINARY_SLOTS.find(s => s.name === slotName);
+        if (!slot) return;
+        const cap = currentKernel === "ide" ? slot.ideLen : slot.cliLen;
+        if (cap <= 0) return;
+
+        const isSurg = surgicalState[slotName];
+        if (slot.defaultAction === "STRIP" || (slotName === "system_prompts/skills.tmpl" && isSurg)) {
+          if (!isSurg) {
+            blocks.push(`<${tag}>\n${STOCK_TEMPLATES[slotName] || ""}\n</${tag}>`);
+          }
+        } else if (slot.defaultAction === "REPLACE") {
+          const text = isSurg ? slot.newPayload : (STOCK_TEMPLATES[slotName] || "");
+          blocks.push(`<${tag}>\n${text}\n</${tag}>`);
+        } else {
+          blocks.push(`<${tag}>\n${STOCK_TEMPLATES[slotName] || ""}\n</${tag}>`);
+        }
+      };
+
+      pushSlot("identity", "system_prompts/identity.tmpl");
+      pushSlot("guidelines", "system_prompts/guidelines.tmpl");
+      pushSlot("function_call", "system_prompts/function_call.tmpl");
+      pushSlot("communication_style", "system_prompts/communication_style.tmpl");
+      pushSlot("artifacts", "system_prompts/artifacts.tmpl");
+      pushSlot("persistent_context", "system_prompts/persistent_context.tmpl");
+      pushSlot("knowledge_items", "system_prompts/knowledge_items.tmpl");
+      pushSlot("planning_mode_artifacts", "system_prompts/planning_mode_artifacts.tmpl");
+      pushSlot("conversation_transcript", "system_prompts/conversation_transcript.tmpl");
+      pushSlot("slash_commands", "system_prompts/slash_commands.tmpl");
+      pushSlot("plugins", "system_prompts/plugins.tmpl");
+      pushSlot("skills", "system_prompts/skills.tmpl");
+      pushSlot("ephemeral_message", "system_prompts/ephemeral_message.tmpl");
+
+      const fullText = blocks.join("\n\n");
+      document.getElementById("assembled-panel-title").textContent =
+        `组装后的完整生效 System Prompt (${(currentTotalBytes / 1024).toFixed(1)} KB)`;
+      document.getElementById("assembled-prompt-pre").textContent = fullText;
+    }
+
+    function renderToolsTable() {
+      const tbody = document.getElementById("tools-tbody");
+      tbody.innerHTML = TOOLS_DATA.map(t => `
+        <tr>
+          <td><code style="font-family: var(--font-mono); font-weight: 600; font-size: 12.5px;">${escapeHtml(t.name)}</code></td>
+          <td><span class="spec-tag tag-forest">100% 保留</span></td>
+          <td style="color: var(--crimson-ink);">${escapeHtml(t.hazard)}</td>
+          <td style="color: var(--ink-primary);">${escapeHtml(t.guard)}</td>
+        </tr>
+      `).join("");
+    }
+
+    // Event Bindings
+    document.querySelectorAll("#philo-filter-bar .filter-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#philo-filter-bar .filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentCat = btn.dataset.cat;
+        renderLedger();
+      });
+    });
+
+    document.querySelectorAll("[data-kernel]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-kernel]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentKernel = btn.dataset.kernel;
+        renderBinarySection();
+      });
+    });
+
+    document.getElementById("btn-preset-surgical").addEventListener("click", () => {
+      BINARY_SLOTS.forEach(s => {
+        surgicalState[s.name] = s.defaultAction !== "KEEP";
+      });
+      renderBinarySection();
+    });
+
+    document.getElementById("btn-preset-stock").addEventListener("click", () => {
+      BINARY_SLOTS.forEach(s => {
+        surgicalState[s.name] = false;
+      });
+      renderBinarySection();
+    });
+
+    document.getElementById("btn-copy-prompt").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const orig = btn.textContent;
+      const text = document.getElementById("assembled-prompt-pre").textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "✓ 已复制完整提示词";
+        setTimeout(() => { btn.textContent = orig; }, 1800);
+      } catch {
+        btn.textContent = "复制失败";
+      }
+    });
+
+    document.querySelectorAll(".mini-copy").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const orig = btn.textContent;
+        try {
+          await navigator.clipboard.writeText(btn.dataset.copy);
+          btn.textContent = "✓ 已复制";
+          setTimeout(() => { btn.textContent = orig; }, 1500);
+        } catch {
+          btn.textContent = "失败";
+        }
+      });
+    });
+
+    // Initial Render
+    renderLedger();
+    renderBinarySection();
+    renderToolsTable();
+  </script>
+</body>
+</html>
