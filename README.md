@@ -63,3 +63,5 @@ Antigravity 提示词精简、上下文窗口解锁与输入框状态栏（上�
 ```bash
 cargo build --release
 ```
+# 友链
+https://linux.do
