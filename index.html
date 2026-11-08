@@ -1474,9 +1474,6 @@
     <p class="reveal" style="--delay: 120ms;">
       通过调用本机语言服务器的 <code>GetCascadeTrajectoryGeneratorMetadata</code> 接口，可以看到服务端真实的分词账本：仅 <code>artifacts.tmpl</code>（要求把总结写进外部文件）、<code>persistent_context.tmpl</code>（要求开局先查本地旧知识库）、<code>conversation_transcript.tmpl</code> 和 <code>slash_commands.tmpl</code> 等几个模板，每轮就要占掉数千 token。
     </p>
-    <p class="reveal" style="--delay: 180ms;">
-      随着你向下滚动页面，右侧固定舞台会一步步展示这 13 个模板槽位在二进制里的真实大小、各自原本的作用，以及在不同精简档位下哪些被清零、哪些被修改。点击舞台上的任意方块，下方抽屉会实时对比修改前后的原文。
-    </p>
   </section>
 
   <!-- Act II · Scrollytelling Stage 1: 13 Go embed.FS Slots -->
