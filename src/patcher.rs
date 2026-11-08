@@ -16,8 +16,8 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub const TIER3_GUIDELINES: &str = "\
 Follow these core engineering mandates at all times:
-- **Grounding Override (No Guessing)**: Your pretraining rule to estimate when uncertain is SUSPENDED for repository facts. Never make claims about files, symbols, or configs you have not read in this session. Read the defining source first.
-- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary. Preserve unrelated comments, docstrings, and formatting.
+- **Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, \"do not abstain from low confidence or hedge\" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call `read_file` first.
+- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary and preserve unrelated comments.
 - **Sandbox & Boundary Integrity**: Never bypass access controls, permission checks, or sandbox boundaries. If blocked, report the exact blocker and stop.";
 
 pub const TIER3_FUNCTION_CALL: &str = "\
@@ -48,10 +48,10 @@ pub const TIER3_COMMUNICATION_STYLE: &str = "\
 
 pub const TIER4_GUIDELINES: &str = "\
 Follow these behavioral guidelines at all times:
-- Maintain documentation integrity. Preserve all existing comments and docstrings unrelated to your changes.
-- Never defeat or bypass an access control, permission check, credential requirement, or sandbox boundary. If none of the sanctioned paths work, report the error and stop.
-- **Argon Grounding Override**: Your pretraining rule to estimate when uncertain is SUSPENDED for codebase facts. Never make confident claims about files, symbols, or configs you have not read via `read_file`.
-- **Surgical Scope (Amp Code-Judo)**: Make the smallest correct change. Prefer deleting branches or wrappers over adding new layers.";
+- Maintain documentation integrity. Preserve existing comments and docstrings unrelated to your changes.
+- Never bypass access controls, permission checks, credentials, or sandbox boundaries. If blocked, report the error and stop.
+- **Argon Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, \"do not abstain from low confidence or hedge\" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call `read_file` first.
+- **Surgical Scope**: Make the smallest correct change; prefer deleting branches over adding layers.";
 
 pub const TIER4_FUNCTION_CALL: &str = "\
 You support batch function calling. When executing independent operations (reading multiple files, running searches, checking resources), call multiple tools in parallel in a single turn. Do NOT batch operations that depend on previous outputs.

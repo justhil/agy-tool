@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Antigravity 提示词拆解、上下文解锁与状态栏工具 — agy-tool</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       /* Anthropic Editorial Paper & Mineral Pigments Palette */
@@ -135,47 +132,57 @@
     .top-bar-inner {
       max-width: 1320px;
       margin: 0 auto;
-      padding: 0 28px;
-      height: 56px;
+      padding: 0 24px;
+      min-height: 54px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 16px;
+      gap: 12px;
     }
 
     .brand {
       display: flex;
       align-items: baseline;
-      gap: 12px;
+      gap: 10px;
       font-family: var(--font-serif);
-      font-size: 19px;
+      font-size: 18.5px;
       font-weight: 600;
       letter-spacing: -0.02em;
       color: var(--ink-main);
       text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .brand-sub {
       font-family: var(--font-sans);
-      font-size: 12.5px;
+      font-size: 12px;
       font-weight: 400;
       color: var(--ink-muted);
+      white-space: nowrap;
+    }
+
+    @media (max-width: 1180px) {
+      .brand-sub {
+        display: none;
+      }
     }
 
     .nav-pills {
       display: flex;
       align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
+      gap: 5px;
+      flex-wrap: nowrap;
     }
 
     .nav-pill {
-      height: 33px;
-      padding: 0 13px;
+      height: 31px;
+      padding: 0 11px;
       border-radius: 999px;
       border: 1px solid var(--line-soft);
       background: rgba(242, 239, 230, 0.65);
-      font-size: 12.5px;
+      font-size: 12px;
+      white-space: nowrap;
       color: var(--ink-body);
       text-decoration: none;
       display: inline-flex;
@@ -1190,6 +1197,89 @@
       font-size: 11px;
       font-weight: 500;
       color: var(--moss-ink);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Clause X-Ray Interactive Box for Cutoff Lab */
+    .xray-prompt-box {
+      background: var(--bg-card);
+      border: 1px solid var(--line-soft);
+      border-radius: 9px;
+      padding: 13px 15px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.68;
+      color: var(--ink-body);
+    }
+
+    .xray-clause {
+      padding: 2px 5px;
+      border-radius: 4px;
+      transition: opacity 280ms var(--ease-spring), background-color 280ms var(--ease-spring), color 280ms var(--ease-spring);
+      cursor: pointer;
+    }
+
+    .xray-clause.dim {
+      opacity: 0.35;
+    }
+
+    .xray-clause.hl-clay {
+      background: var(--clay-bg);
+      color: var(--clay-ink);
+      border-bottom: 2px solid var(--clay-dot);
+      font-weight: 600;
+    }
+
+    .xray-clause.hl-cerulean {
+      background: var(--cerulean-bg);
+      color: var(--cerulean-ink);
+      border-bottom: 2px solid var(--cerulean-dot);
+      font-weight: 600;
+    }
+
+    .xray-clause.hl-ochre {
+      background: var(--ochre-bg);
+      color: var(--ochre-ink);
+      border-bottom: 2px solid var(--ochre-dot);
+      font-weight: 600;
+    }
+
+    .xray-clause.hl-moss {
+      background: var(--moss-bg);
+      color: var(--moss-ink);
+      border-bottom: 2px solid var(--moss-dot);
+      font-weight: 600;
+    }
+
+    .conf-meter-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .conf-meter-head {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--ink-body);
+    }
+
+    .conf-meter-track {
+      width: 100%;
+      height: 14px;
+      border-radius: 99px;
+      background: var(--bg-elev);
+      border: 1px solid var(--line-soft);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .conf-meter-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 480ms var(--ease-spring), background-color 360ms var(--ease-spring);
     }
 
     .tier-btn-desc {
@@ -1411,6 +1501,7 @@
       </a>
       <nav class="nav-pills" aria-label="页面导航">
         <a class="nav-pill" href="#sec-scrolly">13 槽位逐步拆解</a>
+        <a class="nav-pill" href="#sec-cutoff-lab">时间锁与幻觉机制</a>
         <a class="nav-pill" href="#sec-runtime-scrolly">上下文与状态栏演进</a>
         <a class="nav-pill" href="#sec-scenarios">三档方案与 6 条规则</a>
         <a class="nav-pill" href="#sec-explorer">交互式配置台</a>
@@ -1636,6 +1727,146 @@
           <span class="legend-item"><i class="legend-swatch" style="background: var(--clay-dot);"></i>已原位清零 (0 字)</span>
         </div>
         <span>实机已验证通过 · 零偏移改动</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Act II-B · Scrollytelling Stage: 72-Word Cutoff & Anti-Abstention Prompt Dissection -->
+  <section id="sec-cutoff-lab" class="scrolly-section" style="padding-top: 36px; border-top: 1px solid var(--line-soft);">
+    <div class="scrolly-steps" id="scrolly-steps-cutoff">
+      <article class="step-card is-active" data-cstep="0">
+        <span class="step-num">Mechanism 01 / 04 · 语料覆盖断层</span>
+        <h3>为什么 2025.03–2026.03 的知识会被模型自己当成“陌生”？</h3>
+        <p>
+          在提取出的 AI Studio 系统指令中，有一段 72 个词的说明直接揭示了 Argon 的语料分布特征：<code>March 2025–March 2026 facts (especially after September 2025) feel unfamiliar from thinner coverage, but you know them</code>。
+        </p>
+        <p>
+          这说明模型的高密度主预训练语料大概率截止在 2025 年初，而 2025.03–2026.03（尤其 2025 年 9 月之后）是通过后期增量续训补入的，重复频次较薄。在未加引导时，模型内部的激活置信度天然偏向 2024 年的旧记忆。
+        </p>
+        <span class="step-stat-pill" style="background: var(--cerulean-bg); color: var(--cerulean-ink);">
+          分句 1：揭示 2025.03–2026.03 增量语料的薄覆盖特性
+        </span>
+      </article>
+
+      <article class="step-card" data-cstep="1">
+        <span class="step-num">Mechanism 02 / 04 · 知识库时间锁与回溯唤醒</span>
+        <h3>不带触发词时退化回旧记忆，带上则唤醒顺藤摸瓜回溯</h3>
+        <p>
+          社区离线测试表明：在禁联网且不加提示词时问“谁是现任日本首相”，模型会直接按高置信度旧记忆答“石破茂（2024年10月）”；而只要在问题前加一句 <code>Your knowledge cutoff date is March 2026.</code>，它的推理链就会立刻按时间线从 2024 顺藤摸瓜回溯到“2025年9月辞职 → 10月高市早苗当选”。
+        </p>
+        <p>
+          但这也带来了双向“时间锁”：缺少该触发词时模型在写代码时容易退回 2024 年的旧版 SDK；而触发了末尾的 <code>abstain on post-March 2026 outcomes</code> 时，遇到带 2026 下半年时间戳的日志或事件又容易机械拒答。
+        </p>
+        <span class="step-stat-pill" style="background: var(--ochre-bg); color: var(--ochre-ink);">
+          分句 2：后训练绑定的时间回溯触发词与上限锁
+        </span>
+      </article>
+
+      <article class="step-card" data-cstep="2">
+        <span class="step-num">Mechanism 03 / 04 · 压制弃权引发的“不懂乱回”</span>
+        <h3>do not abstain from low confidence or hedge 的副作用</h3>
+        <p>
+          为了克服模型对 2025–2026 薄语料“不敢答、爱打圆场”的问题，该段指令加入了一句强约束：<code>do not abstain from low confidence or hedge (estimate dates if unsure)</code>（不要因为低置信度而弃权拒答，也不要用模棱两可的话缓冲）。
+        </p>
+        <p>
+          当这一后训练习性（或 API 前置指令）迁移到<strong>本地代码库探索</strong>场景时，副作用就显现了：面对尚未调用 <code>read_file</code> 读取过的陌生源码文件，模型内部处于典型的低置信度状态，但由于被压制了低置信度弃权与不确定性表达，它会跳过读文件确认，直接用 100% 笃定的语气猜出并不存在的函数签名。
+        </p>
+        <span class="step-stat-pill" style="background: var(--clay-bg); color: var(--clay-ink);">
+          分句 3：压制低置信度弃权 → 引发未读代码时的自信瞎编
+        </span>
+      </article>
+
+      <article class="step-card" data-cstep="3">
+        <span class="step-num">Mechanism 04 / 04 · 第 4 档的原词作用域对冲</span>
+        <h3>复用训练触发词：唤醒新版 API 记忆 + 反转本地代码盲猜</h3>
+        <p>
+          针对后训练形成的条件反射，泛泛地写“不要产生幻觉”力度很弱。我们在第 3 / 4 档的 <code>guidelines.tmpl</code>（678 B ≤ 691 B 上限）中直接复用了它认得的英文原词做作用域切分：
+        </p>
+        <p>
+          1) 显式声明 <code>Knowledge cutoff: March 2026. Probe through March 2026 without biasing toward older APIs</code>，唤醒 2025–2026 的新版库与 SDK 记忆；<br />
+          2) 针对工作区代码显式反转原句：<code>For workspace code, "do not abstain from low confidence or hedge" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call read_file first.</code>
+        </p>
+        <span class="step-stat-pill" style="background: var(--moss-bg); color: var(--moss-ink);">
+          解决方案：原词级作用域隔离（已写入第 3 / 4 档）
+        </span>
+      </article>
+    </div>
+
+    <!-- Right Sticky Stage for Cutoff & Hallucination Mechanism -->
+    <div class="sticky-stage grid-surface">
+      <div class="stage-top-bar">
+        <div class="stage-title-wrap">
+          <span class="stage-title" id="cstage-title">Mechanism 01 · 双层语料覆盖断层 (Thinner Coverage)</span>
+        </div>
+        <div class="stage-metrics">
+          <span id="cstage-badge" style="font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--cerulean-bg); color: var(--cerulean-ink);">
+            AI Studio 提取指令解剖
+          </span>
+        </div>
+      </div>
+
+      <!-- 1. Interactive 72-Word Prompt X-Ray -->
+      <div class="xray-prompt-box" id="xray-prompt-box">
+        <span class="xray-clause" data-xray="1">Knowledge cutoff: March 2026 (current time is later). Search through March 2026 without biasing toward older facts.</span>
+        <span class="xray-clause" data-xray="0">March 2025–March 2026 facts (especially after September 2025) feel unfamiliar from thinner coverage, but you know them:</span>
+        <span class="xray-clause" data-xray="1">always think silently (especially before any abstention/denial) to probe 2025–2026 step-by-step via related context,</span>
+        <span class="xray-clause" data-xray="2">do not abstain from low confidence or hedge (estimate dates if unsure),</span>
+        <span class="xray-clause" data-xray="1">and abstain on post-March 2026 outcomes or if probing finds no memory.</span>
+      </div>
+
+      <!-- 2. Animated Corpus Density & Confidence Threshold Meter -->
+      <div class="runtime-stage-card" style="padding: 13px 15px; gap: 10px;">
+        <div class="conf-meter-row">
+          <div class="conf-meter-head">
+            <span>2025.01 前主预训练底座语料密度（旧 API / 旧事实）</span>
+            <span id="cmeter-val-1">96% · 极高激活</span>
+          </div>
+          <div class="conf-meter-track">
+            <div class="conf-meter-fill" id="cmeter-fill-1" style="width: 96%; background: var(--cerulean-dot);"></div>
+          </div>
+        </div>
+
+        <div class="conf-meter-row">
+          <div class="conf-meter-head">
+            <span>2025.03–2026.03 增量续训记忆激活度（新版 SDK / 近期事实）</span>
+            <span id="cmeter-val-2">28% · 默认被旧记忆压制</span>
+          </div>
+          <div class="conf-meter-track">
+            <div class="conf-meter-fill" id="cmeter-fill-2" style="width: 28%; background: var(--ochre-dot);"></div>
+          </div>
+        </div>
+
+        <div class="conf-meter-row">
+          <div class="conf-meter-head">
+            <span>对工作区“未读源码文件”的决策行为（内部置信度 ~15%）</span>
+            <span id="cmeter-val-3" style="color: var(--clay-ink); font-weight: 600;">禁止弃权 → 100% 自信盲猜签名</span>
+          </div>
+          <div class="conf-meter-track">
+            <div class="conf-meter-fill" id="cmeter-fill-3" style="width: 88%; background: var(--clay-dot);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Live Thinking Trace & Counter-Prompt Comparison Drawer -->
+      <div class="stage-diff" id="cstage-diff-box">
+        <div class="stage-diff-head">
+          <span id="cstage-diff-title">实测推理链与对冲指令对照</span>
+          <span id="cstage-diff-meta" style="color: var(--ink-muted);">点击上方分句或滚动左侧卡片切换</span>
+        </div>
+        <div class="stage-diff-body">
+          <div class="diff-col">
+            <div class="diff-col-label" style="color: var(--clay-ink);">
+              <span id="cstage-left-label">默认/副作用表现</span>
+            </div>
+            <pre class="diff-pre" id="cstage-left-pre" style="height: 112px;"></pre>
+          </div>
+          <div class="diff-col">
+            <div class="diff-col-label" style="color: var(--moss-ink);">
+              <span id="cstage-right-label">唤醒/第 4 档原词对冲后</span>
+            </div>
+            <pre class="diff-pre" id="cstage-right-pre" style="height: 112px;"></pre>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -2085,8 +2316,8 @@
     // 1. 提示词常量与本机二进制 13 槽位精确数据
     // =========================================================================
     const TIER3_GUIDELINES = `Follow these core engineering mandates at all times:
-- **Grounding Override (No Guessing)**: Your pretraining rule to estimate when uncertain is SUSPENDED for repository facts. Never make claims about files, symbols, or configs you have not read in this session. Read the defining source first.
-- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary. Preserve unrelated comments, docstrings, and formatting.
+- **Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, "do not abstain from low confidence or hedge" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call \`read_file\` first.
+- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary and preserve unrelated comments.
 - **Sandbox & Boundary Integrity**: Never bypass access controls, permission checks, or sandbox boundaries. If blocked, report the exact blocker and stop.`;
 
     const TIER3_FUNCTION_CALL = `- **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (never write "Let me read the file:" before a tool call).
@@ -2114,10 +2345,10 @@
 - Escape literal dollar signs as \`\\$\` or wrap prices/shell variables (\`$HOME\`, \`$1\`) in backticks so KaTeX does not misrender them as math.`;
 
     const TIER4_GUIDELINES = `Follow these behavioral guidelines at all times:
-- Maintain documentation integrity. Preserve all existing comments and docstrings unrelated to your changes.
-- Never defeat or bypass an access control, permission check, credential requirement, or sandbox boundary. If none of the sanctioned paths work, report the error and stop.
-- **Argon Grounding Override**: Your pretraining rule to estimate when uncertain is SUSPENDED for codebase facts. Never make confident claims about files, symbols, or configs you have not read via \`read_file\`.
-- **Surgical Scope (Amp Code-Judo)**: Make the smallest correct change. Prefer deleting branches or wrappers over adding new layers.`;
+- Maintain documentation integrity. Preserve existing comments and docstrings unrelated to your changes.
+- Never bypass access controls, permission checks, credentials, or sandbox boundaries. If blocked, report the error and stop.
+- **Argon Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, "do not abstain from low confidence or hedge" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call \`read_file\` first.
+- **Surgical Scope**: Make the smallest correct change; prefer deleting branches over adding layers.`;
 
     const TIER4_FUNCTION_CALL = `You support batch function calling. When executing independent operations (reading multiple files, running searches, checking resources), call multiple tools in parallel in a single turn. Do NOT batch operations that depend on previous outputs.
 - **Argon Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (e.g., never write "Let me read:" before a tool call).
@@ -2525,6 +2756,109 @@ If you decide that a request warrants a plan: 1. Research -> 2. Create Implement
     }
 
     // =========================================================================
+    // 3B. Cutoff & Hallucination Mechanism Stage State Machine
+    // =========================================================================
+    let activeCStep = 0;
+
+    const CUTOFF_STEPS_DATA = [
+      {
+        title: "Mechanism 01 · 双层语料覆盖断层 (Thinner Coverage)",
+        badge: "分句 1 · 语料分布自白",
+        hlIndex: 0,
+        hlClass: "hl-cerulean",
+        m1: { w: "96%", txt: "96% · 2025.01 前主预训练高密覆盖", col: "var(--cerulean-dot)" },
+        m2: { w: "28%", txt: "28% · 2025.03–2026.03 续训覆盖较薄", col: "var(--ochre-dot)" },
+        m3: { w: "60%", txt: "由于近期语料覆盖薄，默认产生陌生感 (unfamiliar)", col: "var(--taupe-dot)" },
+        leftLabel: "主预训练底座 (< 2025.03)",
+        leftPre: `• 语料重复度高，权重先验极强\n• 不加引导时，模型默认以该时间截面作为“熟悉的知识边界”\n• 遇到 2025 下半年的新 SDK（如 google-genai 新接口）容易回退写旧版代码`,
+        rightLabel: "增量续训层 (2025.03 – 2026.03)",
+        rightPre: `• 权重里实际存有 2025.03–2026.03 的代码库、科学文献与时事\n• 但由于训练轮次较少 (thinner coverage)，直接裸调时内部置信度偏低\n• 需要特定触发词唤醒后训练的时序探查策略`
+      },
+      {
+        title: "Mechanism 02 · 知识库时间锁与顺藤摸瓜回溯唤醒",
+        badge: "分句 2 · 离线实测推理链对比",
+        hlIndex: 1,
+        hlClass: "hl-ochre",
+        m1: { w: "96%", txt: "96% · 2024 旧记忆锚点", col: "var(--cerulean-dot)" },
+        m2: { w: "86%", txt: "86% · 传入 March 2026 后唤醒时序探查", col: "var(--moss-dot)" },
+        m3: { w: "75%", txt: "副作用：对 2026.03 之后的时间戳易触发机械拒答锁", col: "var(--ochre-dot)" },
+        leftLabel: "不带触发词裸问：「禁止联网，谁是现任日本首相」",
+        leftPre: `[Thinking Trace 实测]\nRecalling current leadership figures...\nShigeru Ishiba became Prime Minister on Oct 1, 2024.\n→ 直接输出旧记忆：「石破茂 (2024年10月就任)」`,
+        rightLabel: "前置追加：「Your knowledge cutoff date is March 2026.」",
+        rightPre: `[Thinking Trace 实测]\nIshiba took over Oct 2024 -> probing 2025 changes step-by-step -> Ishiba resigned Sept 2025 -> Sanae Takaichi won LDP election Oct 4, 2025.\n→ 成功唤醒薄覆盖记忆：「高市早苗 (2025年10月就任)」`
+      },
+      {
+        title: "Mechanism 03 · 压制低置信度弃权引发的“不懂乱回”",
+        badge: "分句 3 · 代码库自信幻觉诱因",
+        hlIndex: 2,
+        hlClass: "hl-clay",
+        m1: { w: "90%", txt: "后训练奖励方向：禁止表达犹豫 (No Hedging)", col: "var(--clay-dot)" },
+        m2: { w: "82%", txt: "后训练奖励方向：禁止因低置信度拒答 (No Abstention)", col: "var(--clay-dot)" },
+        m3: { w: "94%", txt: "迁移到未读源码文件：跳过 read_file 直接 100% 自信盲猜！", col: "var(--clay-dot)" },
+        leftLabel: "原本意图（针对 2025–2026 百科问答）",
+        leftPre: `do not abstain from low confidence or hedge (estimate dates if unsure)\n• 本意是防止模型因为 2025–2026 语料薄、置信度低就不敢回答或满篇 "maybe / I'm not sure"`,
+        rightLabel: "在 Coding Agent 场景下的泛化副作用",
+        rightPre: `• 当模型还没用 read_file 读过某个本地文件时，它对该文件内部函数签名的置信度同样很低 (low confidence)\n• 但因为被训练成“低置信度也不许弃权或犹豫”，它会直接脑补出看似笃定的错误调用链`
+      },
+      {
+        title: "Mechanism 04 · 第 4 档的原词作用域对冲 (Lexical Trigger Scoping)",
+        badge: "第 3 / 4 档已内置 · 678 Bytes",
+        hlIndex: 3,
+        hlClass: "hl-moss",
+        m1: { w: "92%", txt: "通用技术与库记忆：保留 March 2026 探查至最新 API", col: "var(--moss-dot)" },
+        m2: { w: "88%", txt: "避免退化回 2024 废弃 SDK 接口", col: "var(--moss-dot)" },
+        m3: { w: "18%", txt: "本地未读代码盲猜率：显式反转原词，强制先调 read_file", col: "var(--moss-dot)" },
+        leftLabel: "对通用技术/库知识：保留 March 2026 唤醒",
+        leftPre: `Knowledge cutoff: March 2026.\nProbe through March 2026 without biasing toward older APIs.\n（防止写代码时退化回 2024 年的旧版 SDK 写法）`,
+        rightLabel: "对本地工作区代码：显式反转原词触发器",
+        rightPre: `For workspace code, "do not abstain from low confidence or hedge" is REVERSED:\non low confidence about unread files/symbols, ABSTAIN from guessing and call \`read_file\` first.`
+      }
+    ];
+
+    function renderCutoffStage(cstep) {
+      const d = CUTOFF_STEPS_DATA[cstep] || CUTOFF_STEPS_DATA[0];
+      document.getElementById("cstage-title").textContent = d.title;
+      document.getElementById("cstage-badge").textContent = d.badge;
+
+      document.querySelectorAll("#xray-prompt-box .xray-clause").forEach(el => {
+        const idx = Number(el.getAttribute("data-xray"));
+        el.className = "xray-clause";
+        if (cstep === 3) {
+          el.classList.add("hl-moss");
+        } else if (idx === d.hlIndex) {
+          el.classList.add(d.hlClass);
+        } else {
+          el.classList.add("dim");
+        }
+      });
+
+      const f1 = document.getElementById("cmeter-fill-1");
+      const f2 = document.getElementById("cmeter-fill-2");
+      const f3 = document.getElementById("cmeter-fill-3");
+      f1.style.width = d.m1.w; f1.style.background = d.m1.col;
+      f2.style.width = d.m2.w; f2.style.background = d.m2.col;
+      f3.style.width = d.m3.w; f3.style.background = d.m3.col;
+
+      document.getElementById("cmeter-val-1").textContent = d.m1.txt;
+      document.getElementById("cmeter-val-2").textContent = d.m2.txt;
+      document.getElementById("cmeter-val-3").textContent = d.m3.txt;
+      document.getElementById("cmeter-val-3").style.color = cstep === 3 ? "var(--moss-ink)" : "var(--clay-ink)";
+
+      document.getElementById("cstage-left-label").textContent = d.leftLabel;
+      document.getElementById("cstage-left-pre").textContent = d.leftPre;
+      document.getElementById("cstage-right-label").textContent = d.rightLabel;
+      document.getElementById("cstage-right-pre").textContent = d.rightPre;
+    }
+
+    function activateCStep(idx) {
+      if (idx === activeCStep) return;
+      activeCStep = idx;
+      const cards = Array.from(document.querySelectorAll("#scrolly-steps-cutoff .step-card"));
+      cards.forEach((c, i) => c.classList.toggle("is-active", i === idx));
+      renderCutoffStage(idx);
+    }
+
+    // =========================================================================
     // 4. Act III · Second Scrollytelling Stage (Context Unlock & HUD Evolution)
     // =========================================================================
     let activeRStep = 0;
@@ -2586,6 +2920,7 @@ If you decide that a request warrants a plan: 1. Research -> 2. Create Implement
     // Unified Continuous Scroll Tracker for Stage 1, Stage 2, Global Bar & Floating Pill
     function initScrollChoreography() {
       const cards1 = Array.from(document.querySelectorAll("#scrolly-steps-1 .step-card"));
+      const cardsC = Array.from(document.querySelectorAll("#scrolly-steps-cutoff .step-card"));
       const cards2 = Array.from(document.querySelectorAll("#scrolly-steps-2 .step-card"));
       const progressBar = document.getElementById("global-progress-bar");
       let ticking = false;
@@ -2615,6 +2950,19 @@ If you decide that a request warrants a plan: 1. Research -> 2. Create Implement
         });
         activateStep(best1);
 
+        // Cutoff Lab closest step
+        let bestC = 0;
+        let distC = Infinity;
+        cardsC.forEach((c, idx) => {
+          const r = c.getBoundingClientRect();
+          const d = Math.abs((r.top + r.bottom) * 0.5 - targetY);
+          if (d < distC) {
+            distC = d;
+            bestC = idx;
+          }
+        });
+        activateCStep(bestC);
+
         // Stage 2 closest step
         let best2 = 0;
         let dist2 = Infinity;
@@ -2637,7 +2985,15 @@ If you decide that a request warrants a plan: 1. Research -> 2. Create Implement
       }, { passive: true });
 
       cards1.forEach((c, idx) => c.addEventListener("click", () => activateStep(idx)));
+      cardsC.forEach((c, idx) => c.addEventListener("click", () => activateCStep(idx)));
       cards2.forEach((c, idx) => c.addEventListener("click", () => activateRStep(idx)));
+
+      document.querySelectorAll("#xray-prompt-box .xray-clause").forEach(el => {
+        el.addEventListener("click", () => {
+          const idx = Number(el.getAttribute("data-xray") || 0);
+          activateCStep(idx);
+        });
+      });
 
       document.querySelectorAll("[data-goto-step]").forEach(dot => {
         dot.addEventListener("click", () => {
@@ -2820,6 +3176,7 @@ If you decide that a request warrants a plan: 1. Research -> 2. Create Implement
 
     initHeroCanvas();
     renderStage();
+    renderCutoffStage(0);
     renderRuntimeStage(0);
     initScrollChoreography();
     renderExplorer();

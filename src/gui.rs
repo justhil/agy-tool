@@ -1248,7 +1248,7 @@ fn render_selected_tier_explanation(ui: &mut egui::Ui, tier: PromptTier) {
             "当前选中 [4档] 具体改动明细：",
             &[
                 "• 清空 7 个模板：artifacts(写外部报告)、persistent_context/knowledge_items(查旧知识库)、planning_mode_artifacts(写计划文件)、conversation_transcript(日志说明)、plugins/slash_commands(插件与命令广告)。",
-                "• 修改 guidelines.tmpl：保留原版安全与注释要求，新增「未读文件前禁止凭记忆猜测代码」、「最小改动原则」。",
+                "• 修改 guidelines.tmpl：声明 Knowledge cutoff: March 2026 唤醒新版 API 记忆，并对工作区代码显式反转 \"do not abstain from low confidence or hedge\"（未读文件严禁盲猜，必须先调 read_file）+ 最小改动原则。",
                 "• 修改 function_call.tmpl：保留原版并行调用，新增「调工具前不写废话或冒号」、「grep 带上下文」、「后台任务不轮询」。",
                 "• 修改 communication_style.tmpl：保留原版格式，新增「直接在聊天框输出结论(禁传 ArtifactMetadata 防报错)」、「edit_file 必带 3~5 行唯一上下文」、「改后跑测试验证」。",
             ],
