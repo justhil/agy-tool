@@ -211,15 +211,19 @@ fn main() {
     }
 
     if do_inject_hud {
-        match install_composer_hud() {
-            Ok(logs) => {
-                for l in logs {
-                    println!("{}", l);
+        if full_recommended && !inspect_hud_state().asar_exists {
+            println!("ℹ 未检测到桌面版客户端 (app.asar)，已跳过桌面状态栏注入。");
+        } else {
+            match install_composer_hud() {
+                Ok(logs) => {
+                    for l in logs {
+                        println!("{}", l);
+                    }
                 }
-            }
-            Err(e) => {
-                eprintln!("✖ HUD 注入失败: {}", e);
-                std::process::exit(1);
+                Err(e) => {
+                    eprintln!("✖ HUD 注入失败: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }
@@ -238,17 +242,21 @@ fn main() {
     }
 
     if do_restore_hud {
-        match restore_stock_asar() {
-            Ok(logs) => {
-                for l in logs {
-                    println!("{}", l);
+        if full_restore && !inspect_hud_state().asar_exists {
+            println!("ℹ 未检测到桌面版客户端 (app.asar)，已跳过 app.asar 还原。");
+        } else {
+            match restore_stock_asar() {
+                Ok(logs) => {
+                    for l in logs {
+                        println!("{}", l);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("✖ 还原 app.asar 失败: {}", e);
+                    std::process::exit(1);
                 }
             }
-            Err(e) => {
-                eprintln!("✖ 还原 app.asar 失败: {}", e);
-                std::process::exit(1);
-            }
+            let _ = hot_remove_via_cdp();
         }
-        let _ = hot_remove_via_cdp();
     }
 }

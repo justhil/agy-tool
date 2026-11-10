@@ -141,7 +141,8 @@ impl AgyToolApp {
         init_select: bool,
     ) {
         if init_select {
-            if let Some(b) = binaries.iter().find(|b| b.exists) {
+            if let Some((idx, b)) = binaries.iter().enumerate().find(|(_, b)| b.exists) {
+                self.selected_binary_tab = idx;
                 self.selected_prompt_tier = if b.prompt_tier == PromptTier::Stock {
                     PromptTier::Tier4StockPlusGuardrails
                 } else {
@@ -154,6 +155,8 @@ impl AgyToolApp {
                     m
                 };
             }
+        } else if self.selected_binary_tab >= binaries.len() && !binaries.is_empty() {
+            self.selected_binary_tab = 0;
         }
         self.binaries = binaries;
         self.hud = hud;
@@ -281,15 +284,22 @@ impl AgyToolApp {
                         let _ = tx.send(WorkerEvent::Log(format!("[错误] 内核修改失败: {}", e)));
                     }
                 }
-                match install_composer_hud() {
-                    Ok(lines) => {
-                        for l in lines {
-                            let _ = tx.send(WorkerEvent::Log(l));
+                if inspect_hud_state().asar_exists {
+                    match install_composer_hud() {
+                        Ok(lines) => {
+                            for l in lines {
+                                let _ = tx.send(WorkerEvent::Log(l));
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(WorkerEvent::Log(format!("[错误] 状态栏注入失败: {}", e)));
                         }
                     }
-                    Err(e) => {
-                        let _ = tx.send(WorkerEvent::Log(format!("[错误] 状态栏注入失败: {}", e)));
-                    }
+                } else {
+                    let _ = tx.send(WorkerEvent::Log(
+                        "  [HUD] 未检测到桌面客户端 (app.asar)，已跳过桌面状态栏注入（CLI/IDE 内核修改已完成）"
+                            .to_string(),
+                    ));
                 }
             },
         );
@@ -310,15 +320,21 @@ impl AgyToolApp {
                     let _ = tx.send(WorkerEvent::Log(format!("[错误] 还原失败: {}", e)));
                 }
             }
-            match restore_stock_asar() {
-                Ok(lines) => {
-                    for l in lines {
-                        let _ = tx.send(WorkerEvent::Log(l));
+            if inspect_hud_state().asar_exists {
+                match restore_stock_asar() {
+                    Ok(lines) => {
+                        for l in lines {
+                            let _ = tx.send(WorkerEvent::Log(l));
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(WorkerEvent::Log(format!("[错误] 还原 app.asar 失败: {}", e)));
                     }
                 }
-                Err(e) => {
-                    let _ = tx.send(WorkerEvent::Log(format!("[错误] 还原 app.asar 失败: {}", e)));
-                }
+            } else {
+                let _ = tx.send(WorkerEvent::Log(
+                    "  [HUD] 未检测到桌面客户端 (app.asar)，已跳过 app.asar 还原".to_string(),
+                ));
             }
         });
     }
@@ -720,9 +736,10 @@ impl AgyToolApp {
             }
 
             let mut clicked_tab = None;
-            ui.columns(2, |cols| {
+            let col_count = self.binaries.len().max(1);
+            ui.columns(col_count, |cols| {
                 for (idx, bin) in self.binaries.iter().enumerate() {
-                    let col = &mut cols[idx.min(1)];
+                    let col = &mut cols[idx];
                     let is_selected = self.selected_binary_tab == idx;
                     let fill = if is_selected {
                         Color32::from_rgba_unmultiplied(2, 132, 199, 12)

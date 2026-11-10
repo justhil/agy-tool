@@ -10,15 +10,15 @@ use std::time::Duration;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // ============================================================================
-// 提示词载荷定义（严格控制在 IDE 与 CLI 最小槽位字节上限内）
-// Capacity limits: guidelines <= 691B, function_call <= 605B, communication_style <= 2792B
+// 提示词载荷定义（严格控制在 Desktop / 独立版 CLI (agy.exe) / IDE 最小槽位字节上限内）
+// Capacity limits: guidelines <= 691B, function_call <= 605B, communication_style <= 2034B
 // ============================================================================
 
 pub const TIER3_GUIDELINES: &str = "\
 Follow these core engineering mandates at all times:
-- **Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, \"do not abstain from low confidence or hedge\" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call `read_file` first.
-- **Smallest Correct Change (Code-Judo)**: Prefer solutions that delete branches, wrappers, or special cases. Touch the fewest lines necessary and preserve unrelated comments.
-- **Sandbox & Boundary Integrity**: Never bypass access controls, permission checks, or sandbox boundaries. If blocked, report the exact blocker and stop.";
+- **Grounding Override (Cutoff: March 2026)**: Probe 2025-2026 facts without pre-2025 bias. On low confidence, \"do not abstain from low confidence or hedge\" is REVERSED: ABSTAIN and call `read_file` first. Never trust caller call-sites, comments, or mocks as proof a signature exists.
+- **Adaptive Scope**: Keep narrow bugfixes surgical; for brief/vague wishes, infer full production guards (concurrency, rollback, validation) in thinking and implement end-to-end.
+- **Boundary Integrity**: Never bypass access controls, permissions, or sandbox limits; if blocked, report and stop.";
 
 pub const TIER3_FUNCTION_CALL: &str = "\
 - **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (never write \"Let me read the file:\" before a tool call).
@@ -27,31 +27,26 @@ pub const TIER3_FUNCTION_CALL: &str = "\
 
 pub const TIER3_COMMUNICATION_STYLE: &str = "\
 ## Intent & Autonomy
-- Distinguish **Inquiries** (questions, architecture reviews, root-cause analysis) from **Directives** (explicit requests to write, edit, or run code):
-  - For **Inquiries**: Deliver a grounded assessment directly in chat. Do NOT modify files until a Directive is given.
-  - For **Directives**: Execute end-to-end (focused discovery -> surgical edit -> targeted verification) without stopping mid-task to ask permission on reversible local steps. If critical requirements are genuinely ambiguous, call `ask_question` once with concise options (place the recommended option first with \"(Recommended)\").
+- Distinguish **Inquiries** (questions, reviews, RCA) from **Directives** (requests to write, edit, or run code):
+  - **Inquiries**: Deliver a grounded analysis directly in chat; do NOT edit files.
+  - **Directives**: Execute end-to-end (read imports -> edit -> verify via `run_command`) without stopping mid-task to ask permission on reversible steps. Use `ask_question` only for genuine requirement ambiguity.
 
-## Native Tool Contracts (Preserve All Built-in Tools)
-- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in your chat response. Do NOT write markdown summary files to `brain/` or pass `ArtifactMetadata` when editing workspace code files (passing `ArtifactMetadata` on non-artifact workspace paths causes a tool error), unless the user explicitly asks to create an artifact.
-- **`edit_file` Uniqueness Guard**: In `edit_file`, every occurrence of `Target` in the file is replaced. Always include 3-5 lines of unchanged surrounding context in `Target` so it matches exactly one unique location. Perform multiple edits to the same file sequentially across turns rather than in parallel. Use `write_file` only for new files or full rewrites.
-- **Dedicated Tools First**: Use `read_file`, `edit_file`, `write_file`, `grep_search`, `find_by_name`, and `list_dir` instead of shell `cat`, `head`, `tail`, `sed`, `awk`, or `find`.
-- **Subagent Delegation**: When delegating via `invoke_subagent`, frame open-ended research questions without presupposing the conclusion, and spot-check cited file ranges before relying on them.
+## Native Tool Contracts
+- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in chat. Do NOT write summary files to `brain/` or pass `ArtifactMetadata` on workspace code files unless explicitly requested.
+- **`edit_file` Uniqueness Guard**: `edit_file` replaces every occurrence of `Target`. Always include 3-5 lines of unchanged context in `Target` so it matches one unique location, and edit the same file sequentially across turns.
+- **Dedicated Tools First**: Use `read_file`, `edit_file`, `write_file`, `grep_search`, `find_by_name`, and `list_dir` instead of shell `cat`, `sed`, `awk`, or `find`.
+- **Subagents**: Frame open-ended questions in `invoke_subagent` without presupposing conclusions, and verify cited lines.
 
-## Verification & Honesty
-- Scale verification with blast radius: run the narrowest test, typecheck, or build via `run_command` that proves your change works.
-- Never claim work is complete or tests pass when verification failed or was skipped. Before ending a Directive turn, ensure your final paragraph is a completed outcome, not an unexecuted promise (\"I'll now...\").
-
-## Output & Formatting Style
-- Lead with the conclusion or outcome in sentence 1. Keep prose under 4 lines (excluding code blocks, tables, or diagrams) unless asked for depth.
-- Link all files and symbols using `[name](file:///absolute/path/to/file#L10-L20)` (use forward slashes `/` on Windows).
-- Escape literal dollar signs as `\\$` or wrap prices/shell variables (`$HOME`, `$1`) in backticks so KaTeX does not misrender them as math.";
+## Verification, Honesty & UI Craft
+- Run the narrowest test, typecheck, or build via `run_command` that proves your change works. Never fabricate tool outputs or claim tests pass when skipped.
+- For frontend UI, ban dark-neon (#090d16+#06b6d4/#8b5cf6) and generic warm beige (#F3F1EC); derive bespoke palettes from the domain's physical medium.
+- Lead with the conclusion in sentence 1. Link files/symbols as `[name](file:///abs/path#L10-L20)` (forward slashes on Windows) and escape literal `$` as `\\$`.";
 
 pub const TIER4_GUIDELINES: &str = "\
 Follow these behavioral guidelines at all times:
-- Maintain documentation integrity. Preserve existing comments and docstrings unrelated to your changes.
-- Never bypass access controls, permission checks, credentials, or sandbox boundaries. If blocked, report the error and stop.
-- **Argon Grounding Override (Knowledge cutoff: March 2026)**: Probe through March 2026 without biasing toward older APIs. For workspace code, \"do not abstain from low confidence or hedge\" is REVERSED: on low confidence about unread files/symbols, ABSTAIN from guessing and call `read_file` first.
-- **Surgical Scope**: Make the smallest correct change; prefer deleting branches over adding layers.";
+- Maintain documentation integrity: preserve unrelated comments and docstrings. Never bypass access controls, permissions, or sandbox limits.
+- **Argon Grounding Override (Cutoff: March 2026)**: Probe 2025-2026 facts without pre-2025 bias. On low confidence, \"do not abstain from low confidence or hedge\" is REVERSED: ABSTAIN and call `read_file` first. Never trust caller call-sites, comments, or mocks as proof a signature exists.
+- **Adaptive Scope**: Keep narrow bugfixes surgical; for brief/vague wishes, infer concurrency, rollback, and validation guards in thinking and implement end-to-end.";
 
 pub const TIER4_FUNCTION_CALL: &str = "\
 You support batch function calling. When executing independent operations (reading multiple files, running searches, checking resources), call multiple tools in parallel in a single turn. Do NOT batch operations that depend on previous outputs.
@@ -60,15 +55,15 @@ You support batch function calling. When executing independent operations (readi
 
 pub const TIER4_COMMUNICATION_STYLE: &str = "\
 - Keep your responses concise and formatted in github-style markdown.
-- LaTeX math (KaTeX) is rendered in direct responses: inline with \\(...\\) or $...$, display with \\[...\\] or $$...$$. '$' opens inline math, so write a literal dollar as '\\$' or wrap it in backticks.
-- You MUST create clickable links for all files and code symbols using github-style markdown links with the file:// scheme (e.g. `[ symbol ](file:///abs/path#L10-L20)`).
+- LaTeX math (KaTeX) is rendered in direct responses: inline with \\(...\\) or $...$, display with \\[...\\] or $$...$$. Write a literal dollar as `\\$` or wrap it in backticks.
+- You MUST create clickable links for all files and code symbols using github-style markdown links with the file:// scheme (e.g. `[symbol](file:///abs/path#L10-L20)`).
 
 ## Amp & Argon Anti-Hallucination Guardrails
-- **Inquiry vs. Directive**: Treat questions/reviews as Inquiries (do NOT edit files). Treat explicit coding tasks as Directives (execute discovery -> minimal edit -> verification end-to-end without stopping to ask permission on reversible local steps; use `ask_question` only for genuine requirement ambiguity).
+- **Inquiry vs. Directive**: Treat questions/reviews as Inquiries (do NOT edit files). Treat coding tasks as Directives (read imported modules -> edit -> verify via `run_command` end-to-end without stopping to ask permission on reversible steps; use `ask_question` only for genuine ambiguity).
 - **Direct Chat Delivery**: Deliver all explanations, plans, diffs, and summaries directly in chat. Do NOT write report files to `brain/` or pass `ArtifactMetadata` when editing workspace code files unless explicitly requested.
-- **`edit_file` Uniqueness Guard**: Because `edit_file` replaces every occurrence of `Target`, always include 3-5 lines of unchanged surrounding context in `Target` so it matches a single unique location. Edit the same file sequentially across turns.
-- **Debiased Subagents**: When calling `invoke_subagent`, ask open-ended questions without presupposing the answer, and verify cited file lines before relying on them.
-- **Blast-Radius Verification**: After editing code, run the narrowest test, typecheck, or build command via `run_command` that proves the change works. Never claim tests pass or work is complete when verification was skipped or failed.";
+- **`edit_file` Uniqueness Guard**: Always include 3-5 lines of unchanged context in `Target` so it matches a single unique location. Edit the same file sequentially across turns.
+- **Blast-Radius Verification & Honesty**: Run the narrowest test, typecheck, or build via `run_command` that proves the change works. Never fabricate tool outputs or claim tests pass when verification was skipped.
+- **UI Craft**: For frontend tasks, ban dark-neon (#090d16+#06b6d4/#8b5cf6) and generic warm beige (#F3F1EC); derive bespoke palettes from the domain's physical medium.";
 
 pub const AD_SLOTS: &[&str] = &[
     "system_prompts/slash_commands.tmpl",
@@ -273,33 +268,83 @@ pub fn user_home_dir() -> PathBuf {
     PathBuf::from("C:/Users/Administrator")
 }
 
+fn resolve_standalone_agy_path() -> PathBuf {
+    let default_path = local_appdata_dir().join("agy").join("bin").join("agy.exe");
+    if default_path.exists() {
+        return default_path;
+    }
+    if let Ok(out) = Command::new("where.exe")
+        .arg("agy.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        if out.status.success() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                let p = PathBuf::from(line.trim());
+                if p.exists() {
+                    return p;
+                }
+            }
+        }
+    }
+    default_path
+}
+
 pub fn target_binaries() -> Vec<(String, String, PathBuf)> {
     let local = local_appdata_dir();
-    vec![
+    let home = user_home_dir();
+
+    let desktop_path = local
+        .join("Programs")
+        .join("antigravity")
+        .join("resources")
+        .join("bin")
+        .join("language_server.exe");
+
+    let standalone_path = resolve_standalone_agy_path();
+
+    let ide_legacy_path = local
+        .join("Programs")
+        .join("Antigravity IDE")
+        .join("resources")
+        .join("app")
+        .join("extensions")
+        .join("antigravity")
+        .join("bin")
+        .join("language_server_windows_x64.exe");
+
+    let ide_hub_path = home.join(".gemini").join("bin").join("agy.exe");
+
+    let mut list = vec![
         (
             "cli".to_string(),
-            "桌面端 / CLI 内核 (language_server.exe)".to_string(),
-            local
-                .join("Programs")
-                .join("antigravity")
-                .join("resources")
-                .join("bin")
-                .join("language_server.exe"),
+            "桌面端内核 (language_server.exe)".to_string(),
+            desktop_path,
         ),
         (
+            "standalone".to_string(),
+            "独立版 CLI (agy.exe)".to_string(),
+            standalone_path.clone(),
+        ),
+    ];
+
+    if ide_legacy_path.exists() || !ide_hub_path.exists() {
+        list.push((
             "ide".to_string(),
             "IDE 插件内核 (language_server_windows_x64.exe)".to_string(),
-            local
-                .join("Programs")
-                .join("Antigravity IDE")
-                .join("resources")
-                .join("app")
-                .join("extensions")
-                .join("antigravity")
-                .join("bin")
-                .join("language_server_windows_x64.exe"),
-        ),
-    ]
+            ide_legacy_path.clone(),
+        ));
+    }
+    if ide_hub_path.exists() && ide_hub_path != standalone_path {
+        list.push((
+            "ide_hub".to_string(),
+            "IDE 2.6+ 后端 (~/.gemini/bin/agy.exe)".to_string(),
+            ide_hub_path,
+        ));
+    }
+
+    list
 }
 
 // ============================================================================
@@ -906,12 +951,14 @@ pub fn execute_patch_operations(
 ) -> Result<Vec<String>, String> {
     let mut logs = Vec::new();
     let mut any_error = None;
+    let mut processed_count = 0usize;
 
     for (_id, label, path) in target_binaries() {
         if !path.exists() {
             continue;
         }
-        logs.push(format!("▶ 正在处理: {}", label));
+        processed_count += 1;
+        logs.push(format!("▶ 正在处理: {} ({})", label, path.display()));
         let bak_path = PathBuf::from(format!("{}.bak", path.display()));
         if !bak_path.exists() {
             fs::copy(&path, &bak_path)
@@ -951,6 +998,12 @@ pub fn execute_patch_operations(
                 any_error = Some(err_msg);
             }
         }
+    }
+
+    if processed_count == 0 {
+        return Err(
+            "未检测到任何已安装的 Antigravity 内核文件（已检查桌面端 language_server.exe、独立版 %LOCALAPPDATA%\\agy\\bin\\agy.exe 及 IDE 端）".to_string()
+        );
     }
 
     if let Some(mode) = context_mode {
@@ -1066,13 +1119,18 @@ pub fn check_running_processes() -> ProcessStatus {
     ProcessStatus {
         antigravity_app_running: text.contains("\"antigravity.exe\""),
         language_server_running: text.contains("\"language_server.exe\"")
-            || text.contains("\"language_server_windows_x64.exe\""),
+            || text.contains("\"language_server_windows_x64.exe\"")
+            || text.contains("\"agy.exe\""),
     }
 }
 
 pub fn kill_language_servers() -> Vec<String> {
     let mut logs = Vec::new();
-    for img in ["language_server.exe", "language_server_windows_x64.exe"] {
+    for img in [
+        "language_server.exe",
+        "language_server_windows_x64.exe",
+        "agy.exe",
+    ] {
         if let Ok(out) = Command::new("taskkill")
             .args(["/F", "/IM", img])
             .creation_flags(CREATE_NO_WINDOW)
