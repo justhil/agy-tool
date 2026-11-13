@@ -4,12 +4,11 @@ use crate::injector::{
     HudInstallState,
 };
 use crate::patcher::{
-    check_running_processes, execute_patch_operations, inspect_all_binaries,
+    check_running_processes, display_slot_name, execute_patch_operations, inspect_all_binaries,
     kill_language_servers, local_appdata_dir, BinaryInspection, ContextMode, ProcessStatus,
-    PromptTier, TemplateSlot, AD_SLOTS, BLOAT_SLOTS, TIER3_COMMUNICATION_STYLE,
-    TIER3_FUNCTION_CALL, TIER3_GUIDELINES, TIER4_COMMUNICATION_STYLE, TIER4_FUNCTION_CALL,
-    TIER4_GUIDELINES,
+    PromptPatch, TemplateSlot,
 };
+use crate::presets::{discover_presets, match_binary_to_preset, PromptPreset};
 use eframe::egui::{
     self, Align, Color32, CursorIcon, FontData, FontDefinitions, FontFamily, FontId, Layout,
     Margin, Pos2, Rect, RichText, Rounding, Sense, Stroke, Vec2,
@@ -43,6 +42,7 @@ pub enum WorkerEvent {
     Log(String),
     FullState {
         binaries: Vec<BinaryInspection>,
+        presets: Vec<PromptPreset>,
         hud: HudInspection,
         proc_status: ProcessStatus,
         init_select: bool,
@@ -56,9 +56,10 @@ pub enum WorkerEvent {
 
 pub struct AgyToolApp {
     pub binaries: Vec<BinaryInspection>,
+    pub presets: Vec<PromptPreset>,
+    pub selected_preset_idx: Option<usize>,
     pub hud: HudInspection,
     pub proc_status: ProcessStatus,
-    pub selected_prompt_tier: PromptTier,
     pub selected_context_mode: ContextMode,
     pub selected_binary_tab: usize,
     pub show_slot_table: bool,
@@ -98,9 +99,10 @@ impl AgyToolApp {
         let is_dump = dump_ui_path.is_some();
         let mut app = Self {
             binaries: Vec::new(),
+            presets: Vec::new(),
+            selected_preset_idx: None,
             hud: placeholder_hud,
             proc_status: ProcessStatus::default(),
-            selected_prompt_tier: PromptTier::Tier4StockPlusGuardrails,
             selected_context_mode: ContextMode::Unlock900K,
             selected_binary_tab: 0,
             show_slot_table: false,
@@ -119,9 +121,10 @@ impl AgyToolApp {
         if is_dump {
             // 离屏帧缓冲截图测试模式下同步加载以保证第 2 帧数据完整
             let binaries = inspect_all_binaries();
+            let presets = discover_presets();
             let hud = inspect_hud_state();
             let proc_status = check_running_processes();
-            app.apply_full_state(binaries, hud, proc_status, true);
+            app.apply_full_state(binaries, presets, hud, proc_status, true);
             app.busy = false;
             app.busy_label.clear();
             app.append_log("已扫描本机 Antigravity 内核文件与输入框状态栏配置。");
@@ -136,6 +139,7 @@ impl AgyToolApp {
     fn apply_full_state(
         &mut self,
         binaries: Vec<BinaryInspection>,
+        presets: Vec<PromptPreset>,
         hud: HudInspection,
         proc_status: ProcessStatus,
         init_select: bool,
@@ -143,11 +147,11 @@ impl AgyToolApp {
         if init_select {
             if let Some((idx, b)) = binaries.iter().enumerate().find(|(_, b)| b.exists) {
                 self.selected_binary_tab = idx;
-                self.selected_prompt_tier = if b.prompt_tier == PromptTier::Stock {
-                    PromptTier::Tier4StockPlusGuardrails
+                if let Some(matched) = match_binary_to_preset(&b.slots, &presets) {
+                    self.selected_preset_idx = presets.iter().position(|p| p.name == matched.name);
                 } else {
-                    b.prompt_tier
-                };
+                    self.selected_preset_idx = None;
+                }
                 let m = b.effective_context_mode();
                 self.selected_context_mode = if m == ContextMode::Stock {
                     ContextMode::Unlock900K
@@ -155,10 +159,18 @@ impl AgyToolApp {
                     m
                 };
             }
-        } else if self.selected_binary_tab >= binaries.len() && !binaries.is_empty() {
-            self.selected_binary_tab = 0;
+        } else {
+            if self.selected_binary_tab >= binaries.len() && !binaries.is_empty() {
+                self.selected_binary_tab = 0;
+            }
+            if let Some(p_idx) = self.selected_preset_idx {
+                if p_idx >= presets.len() {
+                    self.selected_preset_idx = None;
+                }
+            }
         }
         self.binaries = binaries;
+        self.presets = presets;
         self.hud = hud;
         self.proc_status = proc_status;
     }
@@ -178,10 +190,12 @@ impl AgyToolApp {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let binaries = inspect_all_binaries();
+            let presets = discover_presets();
             let hud = inspect_hud_state();
             let proc_status = check_running_processes();
             let _ = tx.send(WorkerEvent::FullState {
                 binaries,
+                presets,
                 hud,
                 proc_status,
                 init_select,
@@ -227,10 +241,12 @@ impl AgyToolApp {
         std::thread::spawn(move || {
             job(&tx);
             let binaries = inspect_all_binaries();
+            let presets = discover_presets();
             let hud = inspect_hud_state();
             let proc_status = check_running_processes();
             let _ = tx.send(WorkerEvent::FullState {
                 binaries,
+                presets,
                 hud,
                 proc_status,
                 init_select: false,
@@ -243,11 +259,11 @@ impl AgyToolApp {
     fn run_binary_patch_async(
         &mut self,
         egui_ctx: egui::Context,
-        prompt: Option<PromptTier>,
+        prompt: Option<PromptPatch>,
         ctx_mode: Option<ContextMode>,
     ) {
         self.spawn_task(egui_ctx, "正在后台写入内核补丁…", move |tx| {
-            match execute_patch_operations(prompt, ctx_mode) {
+            match execute_patch_operations(prompt.as_ref(), ctx_mode) {
                 Ok(lines) => {
                     for l in lines {
                         let _ = tx.send(WorkerEvent::Log(l));
@@ -260,21 +276,26 @@ impl AgyToolApp {
         });
     }
 
+    fn selected_prompt_patch(&self) -> Option<PromptPatch> {
+        if let Some(idx) = self.selected_preset_idx {
+            self.presets.get(idx).map(|p| p.to_patch())
+        } else if !self.presets.is_empty() {
+            Some(PromptPatch::stock())
+        } else {
+            None
+        }
+    }
+
     fn run_full_recommended_async(&mut self, egui_ctx: egui::Context) {
-        self.selected_prompt_tier = PromptTier::Tier4StockPlusGuardrails;
         self.selected_context_mode = ContextMode::Unlock900K;
+        let prompt_patch = self.selected_prompt_patch();
+
         self.spawn_task(
             egui_ctx,
-            "正在后台应用推荐配置 (4档提示词 + 900K上下文 + 状态栏)…",
+            "正在后台应用推荐配置…",
             move |tx| {
-                let _ = tx.send(WorkerEvent::Log(
-                    "=== 开始执行推荐配置：4档提示词 + 900K上下文解锁 + 注入底部状态栏 ==="
-                        .to_string(),
-                ));
-                match execute_patch_operations(
-                    Some(PromptTier::Tier4StockPlusGuardrails),
-                    Some(ContextMode::Unlock900K),
-                ) {
+                match execute_patch_operations(prompt_patch.as_ref(), Some(ContextMode::Unlock900K))
+                {
                     Ok(lines) => {
                         for l in lines {
                             let _ = tx.send(WorkerEvent::Log(l));
@@ -306,11 +327,13 @@ impl AgyToolApp {
     }
 
     fn run_full_restore_async(&mut self, egui_ctx: egui::Context) {
+        self.selected_preset_idx = None;
         self.spawn_task(egui_ctx, "正在后台恢复官方默认设置…", move |tx| {
             let _ = tx.send(WorkerEvent::Log(
                 "=== 开始恢复全部官方默认设置 (还原提示词、上下文上限与 app.asar) ===".to_string(),
             ));
-            match execute_patch_operations(Some(PromptTier::Stock), Some(ContextMode::Stock)) {
+            let restore_patch = PromptPatch::stock();
+            match execute_patch_operations(Some(&restore_patch), Some(ContextMode::Stock)) {
                 Ok(lines) => {
                     for l in lines {
                         let _ = tx.send(WorkerEvent::Log(l));
@@ -339,65 +362,37 @@ impl AgyToolApp {
         });
     }
 
-    fn calc_tier_char_stats(&self, tier: PromptTier) -> (usize, usize) {
+    fn calc_preset_char_stats(&self, preset: Option<&PromptPreset>) -> (usize, usize, Option<String>) {
         let Some(bin) = self.binaries.get(self.selected_binary_tab) else {
-            return (0, 0);
+            return (0, 0, None);
         };
         if bin.slots.is_empty() {
-            return (0, 0);
+            return (0, 0, None);
         }
         let stock_total: usize = bin.slots.iter().map(|s| s.data_length).sum();
-        let ad_bytes: usize = bin
-            .slots
-            .iter()
-            .filter(|s| AD_SLOTS.contains(&s.short_name.as_str()))
-            .map(|s| s.data_length)
-            .sum();
-        let bloat_bytes: usize = bin
-            .slots
-            .iter()
-            .filter(|s| BLOAT_SLOTS.contains(&s.short_name.as_str()))
-            .map(|s| s.data_length)
-            .sum();
-        let core_stock_bytes: usize = bin
-            .slots
-            .iter()
-            .filter(|s| {
-                matches!(
-                    s.short_name.as_str(),
-                    "system_prompts/guidelines.tmpl"
-                        | "system_prompts/function_call.tmpl"
-                        | "system_prompts/communication_style.tmpl"
-                )
-            })
-            .map(|s| s.data_length)
-            .sum();
-
-        let remain = match tier {
-            PromptTier::Stock => stock_total,
-            PromptTier::Tier1AdBlock => stock_total.saturating_sub(ad_bytes),
-            PromptTier::Tier2MaxStock => stock_total.saturating_sub(bloat_bytes),
-            PromptTier::Tier3FullOverhaul => {
-                let t3_core = TIER3_GUIDELINES.len()
-                    + TIER3_FUNCTION_CALL.len()
-                    + TIER3_COMMUNICATION_STYLE.len();
-                stock_total
-                    .saturating_sub(bloat_bytes)
-                    .saturating_sub(core_stock_bytes)
-                    .saturating_add(t3_core)
-            }
-            PromptTier::Tier4StockPlusGuardrails => {
-                let t4_core = TIER4_GUIDELINES.len()
-                    + TIER4_FUNCTION_CALL.len()
-                    + TIER4_COMMUNICATION_STYLE.len();
-                stock_total
-                    .saturating_sub(bloat_bytes)
-                    .saturating_sub(core_stock_bytes)
-                    .saturating_add(t4_core)
-            }
+        let Some(p) = preset else {
+            return (stock_total, 0, None);
         };
+
+        let mut remain = 0usize;
+        let mut overflow = None;
+        for s in &bin.slots {
+            if let Some(new_txt) = p.slots.get(&s.short_name) {
+                if new_txt.len() > s.data_length && overflow.is_none() {
+                    overflow = Some(format!(
+                        "{} 超限 ({}B > {}B)",
+                        display_slot_name(&s.short_name),
+                        new_txt.len(),
+                        s.data_length
+                    ));
+                }
+                remain += new_txt.len();
+            } else {
+                remain += s.data_length;
+            }
+        }
         let saved = stock_total.saturating_sub(remain);
-        (remain, saved)
+        (remain, saved, overflow)
     }
 }
 
@@ -409,11 +404,12 @@ impl eframe::App for AgyToolApp {
                 WorkerEvent::Log(line) => self.append_log(line),
                 WorkerEvent::FullState {
                     binaries,
+                    presets,
                     hud,
                     proc_status,
                     init_select,
                 } => {
-                    self.apply_full_state(binaries, hud, proc_status, init_select);
+                    self.apply_full_state(binaries, presets, hud, proc_status, init_select);
                 }
                 WorkerEvent::LightTick {
                     proc_status,
@@ -550,21 +546,32 @@ impl eframe::App for AgyToolApp {
                 let w2 = (avail_w * 0.28).floor();
                 let w3 = (avail_w - w1 - w2 - gap * 2.0).max(120.0);
 
+                let selected_preset = self
+                    .selected_preset_idx
+                    .and_then(|i| self.presets.get(i));
+                let (_, _, sel_overflow) = self.calc_preset_char_stats(selected_preset);
+                let combo_label = if let Some(p) = selected_preset {
+                    format!("一键应用配置 ({} + 900K上下文 + 注入底部状态栏)", p.name)
+                } else {
+                    "一键应用配置 (900K上下文 + 注入底部状态栏)".to_string()
+                };
+
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
 
                     let btn_full = egui::Button::new(
-                        RichText::new(
-                            "一键应用推荐配置 (4档提示词 + 900K上下文 + 注入底部状态栏)",
-                        )
-                        .size(12.0)
-                        .strong()
-                        .color(Color32::from_rgb(250, 252, 255)),
+                        RichText::new(combo_label)
+                            .size(12.0)
+                            .strong()
+                            .color(Color32::from_rgb(250, 252, 255)),
                     )
                     .fill(ACCENT_BLUE)
                     .rounding(Rounding::same(6.0))
                     .min_size(Vec2::new(w1, 29.0));
-                    if ui.add_enabled(!self.busy, btn_full).clicked() {
+                    if ui
+                        .add_enabled(!self.busy && sel_overflow.is_none(), btn_full)
+                        .clicked()
+                    {
                         self.run_full_recommended_async(ctx.clone());
                     }
 
@@ -752,6 +759,10 @@ impl AgyToolApp {
                         Stroke::new(1.0_f32, BORDER_LINE)
                     };
 
+                    let matched_name =
+                        match_binary_to_preset(&bin.slots, &self.presets).map(|p| p.name.as_str());
+                    let prompt_st = bin.prompt_status_short(matched_name);
+
                     let resp = egui::Frame::none()
                         .fill(fill)
                         .rounding(Rounding::same(6.0))
@@ -803,8 +814,8 @@ impl AgyToolApp {
                                 draw_kv_tag(
                                     ui,
                                     "提示词",
-                                    bin.prompt_tier.short_label(),
-                                    if bin.prompt_tier == PromptTier::Stock {
+                                    &prompt_st,
+                                    if bin.is_prompt_stock() {
                                         FG_SUB
                                     } else {
                                         ACCENT_BLUE
@@ -897,89 +908,106 @@ impl AgyToolApp {
             });
             ui.add_space(5.0);
 
-            let tiers = [
-                (
-                    PromptTier::Tier4StockPlusGuardrails,
-                    "4档 · 原版精简 + 防瞎编规则 (推荐)",
-                    "清空 7 个无关模板，保留原版核心规则并补充防猜代码、最小改动、防工具报错",
-                    ACCENT_BLUE,
-                ),
-                (
-                    PromptTier::Tier3FullOverhaul,
-                    "3档 · 清空冗余 + 核心规则重写",
-                    "清空 7 个无关模板，将行为准则、工具调用、回复格式 3 个模板重写为精简版",
-                    ACCENT_INDIGO,
-                ),
-                (
-                    PromptTier::Tier2MaxStock,
-                    "2档 · 仅清空冗余模板 (保留原版核心)",
-                    "清空外部报告、知识库、聊天记录、插件广告等 7 个模板，其余原封不动",
-                    ACCENT_GREEN,
-                ),
-                (
-                    PromptTier::Tier1AdBlock,
-                    "1档 · 仅去插件与命令广告",
-                    "仅清空 slash_commands 与 plugins 两个推销模板，其余 11 个保持原版",
-                    ACCENT_AMBER,
-                ),
-                (
-                    PromptTier::Stock,
-                    "0档 · 官方原版 (不修改)",
-                    "从 .bak 备份还原全部官方默认提示词模板",
-                    FG_MUTED,
-                ),
-            ];
+            if self.presets.is_empty() {
+                egui::Frame::none()
+                    .fill(BG_SUBTLE)
+                    .rounding(Rounding::same(6.0))
+                    .inner_margin(Margin::symmetric(8.0, 6.0))
+                    .stroke(Stroke::new(1.0_f32, ACCENT_AMBER))
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(
+                            RichText::new("未找到 presets 预设目录（请将 presets 文件夹放在程序同级目录）")
+                                .size(11.0)
+                                .color(ACCENT_AMBER),
+                        );
+                    });
+                ui.add_space(4.0);
+            }
 
-            for (idx, (tier, title, desc, badge_col)) in tiers.into_iter().enumerate() {
-                let selected = self.selected_prompt_tier == tier;
-                let (remain_chars, saved_chars) = self.calc_tier_char_stats(tier);
-                let char_badge = if remain_chars == 0 {
-                    "读取中…".to_string()
-                } else if tier == PromptTier::Stock {
-                    format!("共 {} 字 · 原版", fmt_int(remain_chars))
+            let presets_snapshot = self.presets.clone();
+            for (idx, preset) in presets_snapshot.iter().enumerate() {
+                let selected = self.selected_preset_idx == Some(idx);
+                let (remain_chars, saved_chars, overflow_err) =
+                    self.calc_preset_char_stats(Some(preset));
+                let (char_badge, badge_col) = if let Some(ref err) = overflow_err {
+                    (err.clone(), ACCENT_RED)
+                } else if remain_chars == 0 {
+                    ("读取中…".to_string(), ACCENT_BLUE)
                 } else {
-                    format!(
-                        "剩 {} 字 (减 {} 字)",
-                        fmt_int(remain_chars),
-                        fmt_int(saved_chars)
+                    (
+                        format!(
+                            "剩 {} 字 (减 {} 字)",
+                            fmt_int(remain_chars),
+                            fmt_int(saved_chars)
+                        ),
+                        ACCENT_BLUE,
                     )
                 };
+                let desc = preset.summary();
 
                 if draw_selectable_option_card(
                     ui,
                     ("prompt_opt", idx),
                     selected,
-                    title,
+                    &preset.name,
                     &char_badge,
-                    desc,
+                    &desc,
                     ACCENT_BLUE,
                     badge_col,
                 ) {
-                    self.selected_prompt_tier = tier;
+                    self.selected_preset_idx = Some(idx);
                 }
                 ui.add_space(2.5);
             }
 
-            ui.add_space(1.5);
-            render_selected_tier_explanation(ui, self.selected_prompt_tier);
+            let stock_selected = self.selected_preset_idx.is_none();
+            let (stock_chars, _, _) = self.calc_preset_char_stats(None);
+            let stock_badge = if stock_chars == 0 {
+                "读取中…".to_string()
+            } else {
+                format!("共 {} 字 · 原版", fmt_int(stock_chars))
+            };
+            if draw_selectable_option_card(
+                ui,
+                ("prompt_opt", 9999),
+                stock_selected,
+                "官方原版 (不修改)",
+                &stock_badge,
+                "从 .bak 备份还原全部官方默认提示词模板",
+                ACCENT_BLUE,
+                FG_MUTED,
+            ) {
+                self.selected_preset_idx = None;
+            }
+
+            let selected_preset = self
+                .selected_preset_idx
+                .and_then(|i| self.presets.get(i));
+            let (_, _, sel_overflow) = self.calc_preset_char_stats(selected_preset);
+            let target_label = selected_preset
+                .map(|p| p.name.as_str())
+                .unwrap_or("官方原版");
 
             ui.add_space(4.0);
             let apply_btn = egui::Button::new(
-                RichText::new(format!(
-                    "应用选中的提示词档位: {}",
-                    self.selected_prompt_tier.short_label()
-                ))
-                .size(12.0)
-                .strong()
-                .color(Color32::from_rgb(250, 252, 255)),
+                RichText::new(format!("应用选中的提示词: {}", target_label))
+                    .size(12.0)
+                    .strong()
+                    .color(Color32::from_rgb(250, 252, 255)),
             )
             .fill(ACCENT_BLUE)
             .rounding(Rounding::same(6.0))
             .min_size(Vec2::new(ui.available_width(), 27.0));
 
-            if ui.add_enabled(!self.busy, apply_btn).clicked() {
-                let t = self.selected_prompt_tier;
-                self.run_binary_patch_async(egui_ctx.clone(), Some(t), None);
+            if ui
+                .add_enabled(!self.busy && sel_overflow.is_none(), apply_btn)
+                .clicked()
+            {
+                let patch = selected_preset
+                    .map(|p| p.to_patch())
+                    .unwrap_or_else(PromptPatch::stock);
+                self.run_binary_patch_async(egui_ctx.clone(), Some(patch), None);
             }
         });
     }
@@ -1257,64 +1285,6 @@ impl AgyToolApp {
             });
         });
     }
-}
-
-fn render_selected_tier_explanation(ui: &mut egui::Ui, tier: PromptTier) {
-    let (heading, lines): (&str, &[&str]) = match tier {
-        PromptTier::Tier4StockPlusGuardrails => (
-            "当前选中 [4档] 具体改动明细：",
-            &[
-                "• 清空 7 个模板：artifacts(写外部报告)、persistent_context/knowledge_items(查旧知识库)、planning_mode_artifacts(写计划文件)、conversation_transcript(日志说明)、plugins/slash_commands(插件与命令广告)。",
-                "• 修改 guidelines.tmpl：声明 Knowledge cutoff: March 2026 唤醒新版 API 记忆，并对工作区代码显式反转 \"do not abstain from low confidence or hedge\"（未读文件严禁盲猜，必须先调 read_file）+ 最小改动原则。",
-                "• 修改 function_call.tmpl：保留原版并行调用，新增「调工具前不写废话或冒号」、「grep 带上下文」、「后台任务不轮询」。",
-                "• 修改 communication_style.tmpl：保留原版格式，新增「直接在聊天框输出结论(禁传 ArtifactMetadata 防报错)」、「edit_file 必带 3~5 行唯一上下文」、「改后跑测试验证」。",
-            ],
-        ),
-        PromptTier::Tier3FullOverhaul => (
-            "当前选中 [3档] 具体改动明细：",
-            &[
-                "• 清空 7 个模板：同 4 档，移除外部报告、旧知识库检索、日志说明、插件与斜杠命令推销。",
-                "• 重写 guidelines / function_call / communication_style：不保留原版行文，直接替换为精简规则（区分提问与改代码指令、先给结论、文件链接带行号、禁写 brain/ 外部报告）。",
-                "• 适用场景：希望提示词字数最少、回复简短直接。",
-            ],
-        ),
-        PromptTier::Tier2MaxStock => (
-            "当前选中 [2档] 具体改动明细：",
-            &[
-                "• 清空 7 个模板：移除 artifacts、persistent_context、knowledge_items、planning_mode_artifacts、conversation_transcript、plugins、slash_commands。",
-                "• 3 个核心模板一字不改：guidelines、function_call、communication_style 完全保持官方原版。",
-                "• 适用场景：只去掉写外部文件、查旧知识库与广告，完全保留官方原始说话风格。",
-            ],
-        ),
-        PromptTier::Tier1AdBlock => (
-            "当前选中 [1档] 具体改动明细：",
-            &[
-                "• 仅清空 2 个广告模板：slash_commands.tmpl (回复末尾推销 /goal、/boost 等命令) 与 plugins.tmpl (推销未安装插件)。",
-                "• 其余 11 个模板完全保持官方原版。",
-            ],
-        ),
-        PromptTier::Stock => (
-            "当前选中 [0档] 具体改动明细：",
-            &[
-                "• 从 .bak 备份还原全部 13 个官方提示词模板，不做任何修改。",
-                "• 恢复官方默认的 brain/ 外部报告、知识库检索与命令推荐行为。",
-            ],
-        ),
-    };
-
-    egui::Frame::none()
-        .fill(BG_SUBTLE)
-        .rounding(Rounding::same(6.0))
-        .inner_margin(Margin::symmetric(8.0, 5.0))
-        .stroke(Stroke::new(1.0_f32, BORDER_LINE))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(RichText::new(heading).size(10.5).strong().color(ACCENT_BLUE));
-            ui.add_space(1.5);
-            for &line in lines {
-                ui.label(RichText::new(line).size(10.0).color(FG_SUB));
-            }
-        });
 }
 
 #[allow(clippy::too_many_arguments)]

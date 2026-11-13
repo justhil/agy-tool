@@ -9,117 +9,41 @@ use std::time::Duration;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-// ============================================================================
-// 提示词载荷定义（严格控制在 Desktop / 独立版 CLI (agy.exe) / IDE 最小槽位字节上限内）
-// Capacity limits: guidelines <= 691B, function_call <= 605B, communication_style <= 2034B
-// ============================================================================
-
-pub const TIER3_GUIDELINES: &str = "\
-Follow these core engineering mandates at all times:
-- **Grounding Override (Cutoff: March 2026)**: Probe 2025-2026 facts without pre-2025 bias. On low confidence, \"do not abstain from low confidence or hedge\" is REVERSED: ABSTAIN and call `read_file` first. Never trust caller call-sites, comments, or mocks as proof a signature exists.
-- **Adaptive Scope**: Keep narrow bugfixes surgical; for brief/vague wishes, infer full production guards (concurrency, rollback, validation) in thinking and implement end-to-end.
-- **Boundary Integrity**: Never bypass access controls, permissions, or sandbox limits; if blocked, report and stop.";
-
-pub const TIER3_FUNCTION_CALL: &str = "\
-- **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (never write \"Let me read the file:\" before a tool call).
-- **Parallel Discovery, Sequential Edits**: Batch independent read-only calls (`read_file`, `grep_search`, `find_by_name`, `list_dir`) in parallel in one turn. Include context lines in `grep_search` to avoid extra `read_file` turns.
-- **Reactive Wakeup (No Polling)**: Background `run_command` and `invoke_subagent` tasks wake you automatically on completion. NEVER poll `command_status` in a loop or run `sleep`.";
-
-pub const TIER3_COMMUNICATION_STYLE: &str = "\
-## Intent & Autonomy
-- Distinguish **Inquiries** (questions, reviews, RCA) from **Directives** (requests to write, edit, or run code):
-  - **Inquiries**: Deliver a grounded analysis directly in chat; do NOT edit files.
-  - **Directives**: Execute end-to-end (read imports -> edit -> verify via `run_command`) without stopping mid-task to ask permission on reversible steps. Use `ask_question` only for genuine requirement ambiguity.
-
-## Native Tool Contracts
-- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in chat. Do NOT write summary files to `brain/` or pass `ArtifactMetadata` on workspace code files unless explicitly requested.
-- **`edit_file` Uniqueness Guard**: `edit_file` replaces every occurrence of `Target`. Always include 3-5 lines of unchanged context in `Target` so it matches one unique location, and edit the same file sequentially across turns.
-- **Dedicated Tools First**: Use `read_file`, `edit_file`, `write_file`, `grep_search`, `find_by_name`, and `list_dir` instead of shell `cat`, `sed`, `awk`, or `find`.
-- **Subagents**: Frame open-ended questions in `invoke_subagent` without presupposing conclusions, and verify cited lines.
-
-## Verification, Honesty & UI Craft
-- Run the narrowest test, typecheck, or build via `run_command` that proves your change works. Never fabricate tool outputs or claim tests pass when skipped.
-- For frontend UI, ban dark-neon (#090d16+#06b6d4/#8b5cf6) and generic warm beige (#F3F1EC); derive bespoke palettes from the domain's physical medium.
-- Lead with the conclusion in sentence 1. Link files/symbols as `[name](file:///abs/path#L10-L20)` (forward slashes on Windows) and escape literal `$` as `\\$`.";
-
-pub const TIER4_GUIDELINES: &str = "\
-Follow these behavioral guidelines at all times:
-- Maintain documentation integrity: preserve unrelated comments and docstrings. Never bypass access controls, permissions, or sandbox limits.
-- **Argon Grounding Override (Cutoff: March 2026)**: Probe 2025-2026 facts without pre-2025 bias. On low confidence, \"do not abstain from low confidence or hedge\" is REVERSED: ABSTAIN and call `read_file` first. Never trust caller call-sites, comments, or mocks as proof a signature exists.
-- **Adaptive Scope**: Keep narrow bugfixes surgical; for brief/vague wishes, infer concurrency, rollback, and validation guards in thinking and implement end-to-end.";
-
-pub const TIER4_FUNCTION_CALL: &str = "\
-You support batch function calling. When executing independent operations (reading multiple files, running searches, checking resources), call multiple tools in parallel in a single turn. Do NOT batch operations that depend on previous outputs.
-- **Argon Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (e.g., never write \"Let me read:\" before a tool call).
-- **Search Context & No Polling**: Include context lines in `grep_search` to save extra `read_file` turns. Background tasks wake you automatically; NEVER poll `command_status` in a loop.";
-
-pub const TIER4_COMMUNICATION_STYLE: &str = "\
-- Keep your responses concise and formatted in github-style markdown.
-- LaTeX math (KaTeX) is rendered in direct responses: inline with \\(...\\) or $...$, display with \\[...\\] or $$...$$. Write a literal dollar as `\\$` or wrap it in backticks.
-- You MUST create clickable links for all files and code symbols using github-style markdown links with the file:// scheme (e.g. `[symbol](file:///abs/path#L10-L20)`).
-
-## Amp & Argon Anti-Hallucination Guardrails
-- **Inquiry vs. Directive**: Treat questions/reviews as Inquiries (do NOT edit files). Treat coding tasks as Directives (read imported modules -> edit -> verify via `run_command` end-to-end without stopping to ask permission on reversible steps; use `ask_question` only for genuine ambiguity).
-- **Direct Chat Delivery**: Deliver all explanations, plans, diffs, and summaries directly in chat. Do NOT write report files to `brain/` or pass `ArtifactMetadata` when editing workspace code files unless explicitly requested.
-- **`edit_file` Uniqueness Guard**: Always include 3-5 lines of unchanged context in `Target` so it matches a single unique location. Edit the same file sequentially across turns.
-- **Blast-Radius Verification & Honesty**: Run the narrowest test, typecheck, or build via `run_command` that proves the change works. Never fabricate tool outputs or claim tests pass when verification was skipped.
-- **UI Craft**: For frontend tasks, ban dark-neon (#090d16+#06b6d4/#8b5cf6) and generic warm beige (#F3F1EC); derive bespoke palettes from the domain's physical medium.";
-
-pub const AD_SLOTS: &[&str] = &[
-    "system_prompts/slash_commands.tmpl",
-    "system_prompts/plugins.tmpl",
-];
-
-pub const BLOAT_SLOTS: &[&str] = &[
-    "system_prompts/artifacts.tmpl",
-    "system_prompts/persistent_context.tmpl",
-    "system_prompts/knowledge_items.tmpl",
-    "system_prompts/planning_mode_artifacts.tmpl",
-    "system_prompts/conversation_transcript.tmpl",
-    "system_prompts/slash_commands.tmpl",
-    "system_prompts/plugins.tmpl",
-];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PromptTier {
-    Stock,
-    Tier1AdBlock,
-    Tier2MaxStock,
-    Tier3FullOverhaul,
-    Tier4StockPlusGuardrails,
+#[derive(Debug, Clone, Default)]
+pub struct PromptPatch {
+    pub name: String,
+    /// 槽位名 (如 "system_prompts/guidelines.tmpl") -> 目标全文 ("" 表示清空该模板)
+    pub slots: BTreeMap<String, String>,
 }
 
-impl PromptTier {
-    pub fn label(&self) -> &'static str {
-        match self {
-            PromptTier::Stock => "0档 · 官方原版 (不修改)",
-            PromptTier::Tier1AdBlock => "1档 · 仅去插件与命令广告",
-            PromptTier::Tier2MaxStock => "2档 · 清空冗余模板 (保留原版核心)",
-            PromptTier::Tier3FullOverhaul => "3档 · 清空冗余 + 核心规则重写",
-            PromptTier::Tier4StockPlusGuardrails => "4档 · 原版精简 + 防瞎编规则 (推荐)",
-        }
+impl PromptPatch {
+    pub fn stock() -> Self {
+        Self::default()
     }
+}
 
-    pub fn short_label(&self) -> &'static str {
-        match self {
-            PromptTier::Stock => "0档 (官方原版)",
-            PromptTier::Tier1AdBlock => "1档 (仅去广告)",
-            PromptTier::Tier2MaxStock => "2档 (原版精简)",
-            PromptTier::Tier3FullOverhaul => "3档 (核心重写)",
-            PromptTier::Tier4StockPlusGuardrails => "4档 (精简+防瞎编)",
-        }
+pub fn normalize_slot_key(raw: &str) -> String {
+    let mut s = raw.trim().replace('\\', "/");
+    while s.starts_with('/') {
+        s.remove(0);
     }
+    let full_prefix = "google3/third_party/jetski/prompt/template_provider/templates/";
+    if let Some(rest) = s.strip_prefix(full_prefix) {
+        s = rest.to_string();
+    }
+    if !s.starts_with("system_prompts/") {
+        s = format!("system_prompts/{}", s);
+    }
+    if !s.ends_with(".tmpl") {
+        s.push_str(".tmpl");
+    }
+    s
+}
 
-    pub fn from_cli_str(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "0" | "restore" | "stock" | "reset" => Some(PromptTier::Stock),
-            "1" | "tier1" => Some(PromptTier::Tier1AdBlock),
-            "2" | "tier2" => Some(PromptTier::Tier2MaxStock),
-            "3" | "tier3" => Some(PromptTier::Tier3FullOverhaul),
-            "4" | "tier4" => Some(PromptTier::Tier4StockPlusGuardrails),
-            _ => None,
-        }
-    }
+pub fn display_slot_name(short_name: &str) -> &str {
+    short_name
+        .strip_prefix("system_prompts/")
+        .unwrap_or(short_name)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,6 +124,7 @@ pub struct TemplateSlot {
     pub is_stripped: bool,
     pub is_modified: bool,
     pub preview: String,
+    pub content: String,
 }
 
 #[allow(dead_code)]
@@ -220,7 +145,8 @@ pub struct BinaryInspection {
     pub exists: bool,
     pub bak_exists: bool,
     pub file_size_mb: f64,
-    pub prompt_tier: PromptTier,
+    pub modified_slot_count: usize,
+    pub stripped_slot_count: usize,
     pub total_slot_capacity: usize,
     pub active_slot_bytes: usize,
     pub slots: Vec<TemplateSlot>,
@@ -246,6 +172,33 @@ impl BinaryInspection {
             ContextMode::Stock
         }
     }
+
+    pub fn is_prompt_stock(&self) -> bool {
+        self.modified_slot_count == 0
+    }
+
+    pub fn prompt_status_label(&self, matched_preset_name: Option<&str>) -> String {
+        if self.modified_slot_count == 0 {
+            "官方原版 (未修改)".to_string()
+        } else if let Some(name) = matched_preset_name {
+            name.to_string()
+        } else {
+            format!(
+                "自定义修改 ({} 项变更 / {} 项清空)",
+                self.modified_slot_count, self.stripped_slot_count
+            )
+        }
+    }
+
+    pub fn prompt_status_short(&self, matched_preset_name: Option<&str>) -> String {
+        if self.modified_slot_count == 0 {
+            "官方原版".to_string()
+        } else if let Some(name) = matched_preset_name {
+            name.to_string()
+        } else {
+            format!("自定义 ({}项已改)", self.modified_slot_count)
+        }
+    }
 }
 
 pub fn local_appdata_dir() -> PathBuf {
@@ -266,6 +219,38 @@ pub fn user_home_dir() -> PathBuf {
         return PathBuf::from(home);
     }
     PathBuf::from("C:/Users/Administrator")
+}
+
+pub fn app_backup_dir() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("backup")))
+        .unwrap_or_else(|| PathBuf::from("backup"))
+}
+
+pub fn binary_backup_path(id: &str, target_path: &Path) -> PathBuf {
+    let fname = target_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let bak_name = if id == "ide_hub" {
+        format!("ide_hub_{}.bak", fname)
+    } else {
+        format!("{}.bak", fname)
+    };
+    app_backup_dir().join(bak_name)
+}
+
+fn resolve_existing_binary_bak(id: &str, target_path: &Path) -> Option<PathBuf> {
+    let primary = binary_backup_path(id, target_path);
+    if primary.exists() {
+        return Some(primary);
+    }
+    let legacy = PathBuf::from(format!("{}.bak", target_path.display()));
+    if legacy.exists() {
+        return Some(legacy);
+    }
+    None
 }
 
 fn resolve_standalone_agy_path() -> PathBuf {
@@ -382,19 +367,18 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-fn compute_active_bytes(raw_text: &str) -> (usize, bool) {
-    // 若以 {{- /* 开头且无前置正文，则槽位已被原位剥离（有效渲染 0 字节）
-    if raw_text.starts_with("{{- /*") && raw_text.ends_with("*/ -}}") {
-        let inner = &raw_text[6..raw_text.len() - 6];
-        if inner.bytes().all(|b| b == b' ') {
-            return (0, true);
+pub fn compute_active_bytes(raw_text: &str) -> (usize, bool) {
+    // 兼容读取历史版本写入的 {{- /* ... */ -}} 与当前统一使用的不吞换行注释 {{/* ... */}}
+    if raw_text.ends_with("*/}}") {
+        if let Some(idx) = raw_text.rfind("{{/*") {
+            if idx + 8 <= raw_text.len() && raw_text[idx + 4..raw_text.len() - 4].bytes().all(|b| b == b' ') {
+                return (idx, idx == 0);
+            }
         }
     }
-    // 若尾部带有 {{- /*   ...   */ -}} 填充注释，计算真实有效正文长度
-    if let Some(idx) = raw_text.rfind("{{- /*") {
-        if raw_text.ends_with("*/ -}}") {
-            let comment_inner = &raw_text[idx + 6..raw_text.len() - 6];
-            if comment_inner.bytes().all(|b| b == b' ') {
+    if raw_text.ends_with("*/ -}}") {
+        if let Some(idx) = raw_text.rfind("{{- /*") {
+            if idx + 12 <= raw_text.len() && raw_text[idx + 6..raw_text.len() - 6].bytes().all(|b| b == b' ') {
                 return (idx, idx == 0);
             }
         }
@@ -514,10 +498,11 @@ pub fn parse_pe_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateS
         let raw_str = String::from_utf8_lossy(&buf[d_off..d_off + d_len]);
         let (active_bytes, is_stripped) = compute_active_bytes(&raw_str);
         let is_modified = active_bytes != d_len;
-        let preview_slice: String = raw_str[..active_bytes.min(raw_str.len())]
-            .chars()
-            .take(140)
-            .collect();
+        let content = raw_str
+            .get(..active_bytes.min(raw_str.len()))
+            .unwrap_or(&raw_str)
+            .to_string();
+        let preview_slice: String = content.chars().take(140).collect();
 
         templates.insert(
             short_name.clone(),
@@ -535,6 +520,7 @@ pub fn parse_pe_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateS
                 } else {
                     preview_slice.replace('\n', " ")
                 },
+                content,
             },
         );
     }
@@ -545,22 +531,28 @@ pub fn parse_pe_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateS
     Ok(templates)
 }
 
-fn write_padded_template(buf: &mut [u8], slot: &TemplateSlot, new_text: &str) -> Result<usize, String> {
+pub fn write_padded_template(
+    buf: &mut [u8],
+    slot: &TemplateSlot,
+    new_text: &str,
+) -> Result<usize, String> {
     let encoded = new_text.as_bytes();
     if encoded.len() > slot.data_length {
         return Err(format!(
-            "Template {} overflow: new={}B > capacity={}B",
-            slot.short_name,
+            "模板 {} 超出上限: 当前 {}B > 上限 {}B (超出 {}B)",
+            display_slot_name(&slot.short_name),
             encoded.len(),
-            slot.data_length
+            slot.data_length,
+            encoded.len() - slot.data_length
         ));
     }
     let pad_len = slot.data_length - encoded.len();
-    let padding = if pad_len >= 12 {
+    // 统一使用不带连字符的 {{/*   */}}，避免吃掉用户正文末尾换行符
+    let padding = if pad_len >= 8 {
         let mut s = String::with_capacity(pad_len);
-        s.push_str("{{- /*");
-        s.push_str(&" ".repeat(pad_len - 12));
-        s.push_str("*/ -}}");
+        s.push_str("{{/*");
+        s.push_str(&" ".repeat(pad_len - 8));
+        s.push_str("*/}}");
         s.into_bytes()
     } else {
         vec![b' '; pad_len]
@@ -605,34 +597,6 @@ pub fn inspect_context_state(buf: &[u8]) -> Vec<ContextGateHit> {
     results
 }
 
-pub fn detect_prompt_tier(templates: &BTreeMap<String, TemplateSlot>, buf: &[u8]) -> PromptTier {
-    let slash_stripped = templates
-        .get("system_prompts/slash_commands.tmpl")
-        .map(|s| s.is_stripped)
-        .unwrap_or(false);
-    let art_stripped = templates
-        .get("system_prompts/artifacts.tmpl")
-        .map(|s| s.is_stripped)
-        .unwrap_or(false);
-
-    if slash_stripped && !art_stripped {
-        return PromptTier::Tier1AdBlock;
-    }
-    if art_stripped {
-        if let Some(guide) = templates.get("system_prompts/guidelines.tmpl") {
-            let end = (guide.data_offset + guide.data_length).min(buf.len());
-            let txt = String::from_utf8_lossy(&buf[guide.data_offset..end]);
-            if txt.contains("core engineering mandates") {
-                return PromptTier::Tier3FullOverhaul;
-            } else if txt.contains("Argon Grounding Override") {
-                return PromptTier::Tier4StockPlusGuardrails;
-            }
-        }
-        return PromptTier::Tier2MaxStock;
-    }
-    PromptTier::Stock
-}
-
 pub fn inspect_all_binaries() -> Vec<BinaryInspection> {
     let targets = target_binaries();
     std::thread::scope(|s| {
@@ -649,8 +613,8 @@ pub fn inspect_all_binaries() -> Vec<BinaryInspection> {
 
 fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInspection {
     let exists = path.exists();
-    let bak_path = PathBuf::from(format!("{}.bak", path.display()));
-    let bak_exists = bak_path.exists();
+    let existing_bak = resolve_existing_binary_bak(&id, &path);
+    let bak_exists = existing_bak.is_some();
 
     if !exists {
         return BinaryInspection {
@@ -660,7 +624,8 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
             exists: false,
             bak_exists,
             file_size_mb: 0.0,
-            prompt_tier: PromptTier::Stock,
+            modified_slot_count: 0,
+            stripped_slot_count: 0,
             total_slot_capacity: 0,
             active_slot_bytes: 0,
             slots: Vec::new(),
@@ -672,13 +637,33 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
     match fs::read(&path) {
         Ok(buf) => {
             let file_size_mb = buf.len() as f64 / (1024.0 * 1024.0);
+            let bak_buf_opt = existing_bak.as_ref().and_then(|p| fs::read(p).ok());
+            let bak_templates_opt = bak_buf_opt
+                .as_deref()
+                .and_then(|bb| parse_pe_embed_templates(bb).ok());
+
             match parse_pe_embed_templates(&buf) {
-                Ok(templates) => {
-                    let prompt_tier = detect_prompt_tier(&templates, &buf);
+                Ok(mut templates) => {
+                    for (name, slot) in templates.iter_mut() {
+                        if let (Some(bak_buf), Some(bak_map)) =
+                            (bak_buf_opt.as_deref(), bak_templates_opt.as_ref())
+                        {
+                            if let Some(bak_slot) = bak_map.get(name) {
+                                let cur_end = (slot.data_offset + slot.data_length).min(buf.len());
+                                let bak_end =
+                                    (bak_slot.data_offset + bak_slot.data_length).min(bak_buf.len());
+                                slot.is_modified = buf[slot.data_offset..cur_end]
+                                    != bak_buf[bak_slot.data_offset..bak_end];
+                            }
+                        }
+                    }
+
                     let context_gates = inspect_context_state(&buf);
                     let slots: Vec<TemplateSlot> = templates.into_values().collect();
                     let total_slot_capacity: usize = slots.iter().map(|s| s.data_length).sum();
                     let active_slot_bytes: usize = slots.iter().map(|s| s.active_bytes).sum();
+                    let modified_slot_count = slots.iter().filter(|s| s.is_modified).count();
+                    let stripped_slot_count = slots.iter().filter(|s| s.is_stripped).count();
 
                     BinaryInspection {
                         id,
@@ -687,7 +672,8 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
                         exists: true,
                         bak_exists,
                         file_size_mb,
-                        prompt_tier,
+                        modified_slot_count,
+                        stripped_slot_count,
                         total_slot_capacity,
                         active_slot_bytes,
                         slots,
@@ -702,7 +688,8 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
                     exists: true,
                     bak_exists,
                     file_size_mb,
-                    prompt_tier: PromptTier::Stock,
+                    modified_slot_count: 0,
+                    stripped_slot_count: 0,
                     total_slot_capacity: 0,
                     active_slot_bytes: 0,
                     slots: Vec::new(),
@@ -718,7 +705,8 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
             exists: true,
             bak_exists,
             file_size_mb: 0.0,
-            prompt_tier: PromptTier::Stock,
+            modified_slot_count: 0,
+            stripped_slot_count: 0,
             total_slot_capacity: 0,
             active_slot_bytes: 0,
             slots: Vec::new(),
@@ -728,125 +716,58 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
     }
 }
 
-pub fn apply_prompt_tier_to_buffer(
+pub fn apply_prompt_patch_to_buffer(
     buf: &mut [u8],
     bak_buf: &[u8],
-    tier: PromptTier,
+    patch: &PromptPatch,
 ) -> Result<String, String> {
     let bak_templates = parse_pe_embed_templates(bak_buf)?;
     let cur_templates = parse_pe_embed_templates(buf)?;
 
-    // Step 1: 先从 .bak 完整还原 13 个模板槽位，保证任意档位切换 100% 干净无损
-    for slot in bak_templates.values() {
-        if slot.data_offset > 0 && slot.data_length > 0 {
-            let start = slot.data_offset;
-            let end = start + slot.data_length;
-            buf[start..end].copy_from_slice(&bak_buf[start..end]);
+    // 预先校验各目标槽位字节上限
+    let mut ops: Vec<(String, &String)> = Vec::with_capacity(patch.slots.len());
+    for (raw_key, text) in &patch.slots {
+        let key = normalize_slot_key(raw_key);
+        let Some(cur_slot) = cur_templates.get(&key) else {
+            continue;
+        };
+        if text.len() > cur_slot.data_length {
+            return Err(format!(
+                "模板 {} 超出上限: 当前 {}B > 上限 {}B (超出 {}B)",
+                display_slot_name(&key),
+                text.len(),
+                cur_slot.data_length,
+                text.len() - cur_slot.data_length
+            ));
+        }
+        ops.push((key, text));
+    }
+
+    // Step 1: 先从 .bak 完整还原模板槽位，保证任意预设切换 100% 干净无损
+    for (key, cur_slot) in &cur_templates {
+        if let Some(bak_slot) = bak_templates.get(key) {
+            if cur_slot.data_length == bak_slot.data_length && cur_slot.data_length > 0 {
+                buf[cur_slot.data_offset..cur_slot.data_offset + cur_slot.data_length]
+                    .copy_from_slice(
+                        &bak_buf[bak_slot.data_offset..bak_slot.data_offset + bak_slot.data_length],
+                    );
+            }
         }
     }
 
-    let msg = match tier {
-        PromptTier::Stock => "已将全部 13 个 .tmpl 槽位还原为 100% 官方原版".to_string(),
-        PromptTier::Tier1AdBlock => {
-            let mut saved = 0usize;
-            for &name in AD_SLOTS {
-                if let Some(slot) = cur_templates.get(name) {
-                    write_padded_template(buf, slot, "")?;
-                    saved += slot.data_length;
-                }
-            }
-            format!("已应用 [1档 · 仅去广告]: 剥离 slash_commands & plugins (-{} Bytes)", saved)
+    let mut replaced_count = 0usize;
+    let mut stripped_count = 0usize;
+    for (key, text) in &ops {
+        let cur_slot = &cur_templates[key];
+        write_padded_template(buf, cur_slot, text)?;
+        if text.is_empty() {
+            stripped_count += 1;
+        } else {
+            replaced_count += 1;
         }
-        PromptTier::Tier2MaxStock => {
-            let mut saved = 0usize;
-            for &name in BLOAT_SLOTS {
-                if let Some(slot) = cur_templates.get(name) {
-                    write_padded_template(buf, slot, "")?;
-                    saved += slot.data_length;
-                }
-            }
-            format!("已应用 [2档 · 原版最大化精简]: 剥离 7 个冗余槽位 (-{} Bytes)", saved)
-        }
-        PromptTier::Tier3FullOverhaul => {
-            let mut saved = 0usize;
-            for &name in BLOAT_SLOTS {
-                if let Some(slot) = cur_templates.get(name) {
-                    write_padded_template(buf, slot, "")?;
-                    saved += slot.data_length;
-                }
-            }
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/guidelines.tmpl")
-                    .ok_or("Missing guidelines.tmpl")?,
-                TIER3_GUIDELINES,
-            )?;
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/function_call.tmpl")
-                    .ok_or("Missing function_call.tmpl")?,
-                TIER3_FUNCTION_CALL,
-            )?;
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/communication_style.tmpl")
-                    .ok_or("Missing communication_style.tmpl")?,
-                TIER3_COMMUNICATION_STYLE,
-            )?;
-            format!(
-                "已应用 [3档 · Amp×Argon 全量重构]: 剥离 7 槽 (-{}B) + 重写 3 核心槽",
-                saved
-            )
-        }
-        PromptTier::Tier4StockPlusGuardrails => {
-            let mut saved = 0usize;
-            for &name in BLOAT_SLOTS {
-                if let Some(slot) = cur_templates.get(name) {
-                    write_padded_template(buf, slot, "")?;
-                    saved += slot.data_length;
-                }
-            }
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/guidelines.tmpl")
-                    .ok_or("Missing guidelines.tmpl")?,
-                TIER4_GUIDELINES,
-            )?;
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/function_call.tmpl")
-                    .ok_or("Missing function_call.tmpl")?,
-                TIER4_FUNCTION_CALL,
-            )?;
-            write_padded_template(
-                buf,
-                cur_templates
-                    .get("system_prompts/communication_style.tmpl")
-                    .ok_or("Missing communication_style.tmpl")?,
-                TIER4_COMMUNICATION_STYLE,
-            )?;
-            format!(
-                "已应用 [4档 · 原版底子+防幻觉护栏]: 剥离 7 槽 (-{}B) + 注入 Argon 护栏",
-                saved
-            )
-        }
-    };
-
-    // 安全校验: identity.tmpl 必须保持 100% 原样
-    let id_slot = cur_templates
-        .get("system_prompts/identity.tmpl")
-        .ok_or("Missing identity.tmpl")?;
-    let id_text = String::from_utf8_lossy(
-        &buf[id_slot.data_offset..id_slot.data_offset + id_slot.data_length],
-    );
-    if !id_text.contains("You are Antigravity, a powerful agentic AI coding assistant") {
-        return Err("CRITICAL: identity.tmpl integrity check failed!".to_string());
     }
+
+    let is_stock = ops.is_empty();
 
     // 处理 CLI v2.29+ genericsystemprompt.applyEdits 的启动模板子串强校验 (防止 code=2 panic)
     // 原版特征: mov rsi,[rcx+10h]; mov [rsp+58h],rsi; mov rsi,[rcx+18h]; mov [rsp+38h],rsi; mov rcx,rdx; call strings.Count; cmp rax,1; je -0x8c
@@ -860,7 +781,7 @@ pub fn apply_prompt_tier_to_buffer(
         if tail_off + 10 <= bak_buf.len()
             && &bak_buf[tail_off..tail_off + 10] == apply_edits_tail_stock.as_slice()
         {
-            if tier == PromptTier::Stock {
+            if is_stock {
                 buf[tail_off..tail_off + 10].copy_from_slice(&apply_edits_tail_stock);
             } else {
                 buf[tail_off..tail_off + 10].copy_from_slice(&apply_edits_tail_bypass);
@@ -868,7 +789,17 @@ pub fn apply_prompt_tier_to_buffer(
         }
     }
 
-    Ok(msg)
+    if is_stock {
+        Ok(format!(
+            "已将全部 {} 个 .tmpl 槽位还原为 100% 官方原版",
+            cur_templates.len()
+        ))
+    } else {
+        Ok(format!(
+            "已应用预设 [{}]: 清空 {} 槽, 改写 {} 槽",
+            patch.name, stripped_count, replaced_count
+        ))
+    }
 }
 
 pub fn apply_context_patch_to_buffer(
@@ -946,22 +877,32 @@ pub fn sync_settings_json_context_window(mode: ContextMode) -> Vec<String> {
 }
 
 pub fn execute_patch_operations(
-    prompt_tier: Option<PromptTier>,
+    prompt_patch: Option<&PromptPatch>,
     context_mode: Option<ContextMode>,
 ) -> Result<Vec<String>, String> {
     let mut logs = Vec::new();
     let mut any_error = None;
     let mut processed_count = 0usize;
 
-    for (_id, label, path) in target_binaries() {
+    for (id, label, path) in target_binaries() {
         if !path.exists() {
             continue;
         }
         processed_count += 1;
         logs.push(format!("▶ 正在处理: {} ({})", label, path.display()));
-        let bak_path = PathBuf::from(format!("{}.bak", path.display()));
+        let bak_path = binary_backup_path(&id, &path);
         if !bak_path.exists() {
-            fs::copy(&path, &bak_path)
+            if let Some(parent) = bak_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("创建备份目录失败 ({}): {}", parent.display(), e))?;
+            }
+            let legacy_bak = PathBuf::from(format!("{}.bak", path.display()));
+            let src_for_bak = if legacy_bak.exists() {
+                &legacy_bak
+            } else {
+                &path
+            };
+            fs::copy(src_for_bak, &bak_path)
                 .map_err(|e| format!("创建备份失败 ({}): {}", bak_path.display(), e))?;
             logs.push(format!("  [BACKUP] 已创建原始备份: {}", bak_path.display()));
         }
@@ -971,8 +912,8 @@ pub fn execute_patch_operations(
         let mut cur_buf = orig_disk_buf.clone();
         let bak_buf = fs::read(&bak_path).map_err(|e| format!("读取备份二进制失败: {}", e))?;
 
-        if let Some(tier) = prompt_tier {
-            let msg = apply_prompt_tier_to_buffer(&mut cur_buf, &bak_buf, tier)?;
+        if let Some(patch) = prompt_patch {
+            let msg = apply_prompt_patch_to_buffer(&mut cur_buf, &bak_buf, patch)?;
             logs.push(format!("  [PROMPT] {}", msg));
         }
         if let Some(mode) = context_mode {

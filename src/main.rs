@@ -2,6 +2,7 @@ mod asar;
 mod gui;
 mod injector;
 mod patcher;
+mod presets;
 
 use eframe::egui;
 use gui::AgyToolApp;
@@ -9,9 +10,11 @@ use injector::{
     hot_inject_via_cdp, hot_remove_via_cdp, inspect_hud_state, install_composer_hud,
     restore_stock_asar,
 };
-use patcher::{execute_patch_operations, inspect_all_binaries, ContextMode, PromptTier};
+use patcher::{execute_patch_operations, inspect_all_binaries, ContextMode, PromptPatch};
+use presets::{discover_presets, match_binary_to_preset, resolve_preset};
 
 fn print_cli_status() {
+    let presets = discover_presets();
     println!("=========================================================================");
     println!(" AGY-TOOL // Antigravity 二进制与底部 Composer HUD 状态扫描");
     println!("=========================================================================");
@@ -30,7 +33,8 @@ fn print_cli_status() {
                 "尚未创建 (首次修改时自动备份)"
             }
         );
-        println!("  提示词状态: {}", bin.prompt_tier.label());
+        let matched = match_binary_to_preset(&bin.slots, &presets).map(|p| p.name.as_str());
+        println!("  提示词状态: {}", bin.prompt_status_label(matched));
         println!(
             "  embed.FS 容量: {:.1} KB 有效 / {:.1} KB 总计 ({} 个模板槽位)",
             bin.active_slot_bytes as f64 / 1024.0,
@@ -69,12 +73,12 @@ AGY-TOOL v1.0 — Antigravity (Gemini 4 Argon) 提示词精简、百万上下文
 用法:
   agy-tool.exe                                  # 启动独立轻量高密度 GUI 面板 (默认)
   agy-tool.exe --status | --inspect             # 只读扫描本机二进制与 HUD 状态
-  agy-tool.exe --prompt <1|2|3|4|restore>       # 单独切换提示词精简档位
+  agy-tool.exe --prompt <preset|restore>        # 应用 presets/ 下的预设目录，或 restore 还原官方原版
   agy-tool.exe --context <512k|900k|restore>    # 单独切换上下文窗口门禁档位
   agy-tool.exe --inject-hud                     # 注入底部 Request Review 左侧 HUD (自动清理旧版顶栏)
   agy-tool.exe --hot-hud                        # 仅通过 CDP 向运行中窗口实时热注入底部 HUD
   agy-tool.exe --restore-hud                    # 卸载 HUD 并还原官方纯净 app.asar
-  agy-tool.exe --full                           # 一键满血配置 (Tier 4 提示词 + 900K 上下文 + 底部 HUD)
+  agy-tool.exe --full                           # 解锁 900K 上下文 + 底部 HUD (可配合 --prompt)
   agy-tool.exe --restore                        # 一键全部恢复官方默认状态"
     );
 }
@@ -111,7 +115,8 @@ fn main() {
     let mut inspect_only = false;
     let mut full_restore = false;
     let mut full_recommended = false;
-    let mut prompt_tier: Option<PromptTier> = None;
+    let mut preset_query: Option<String> = None;
+    let mut restore_all_prompts = false;
     let mut context_mode: Option<ContextMode> = None;
     let mut do_inject_hud = false;
     let mut do_hot_hud = false;
@@ -146,10 +151,13 @@ fn main() {
             "--prompt" | "-p" => {
                 i += 1;
                 if let Some(val) = args.get(i) {
-                    prompt_tier = PromptTier::from_cli_str(val);
-                    if prompt_tier.is_none() {
-                        eprintln!("无效的 --prompt 参数: {}", val);
-                        std::process::exit(1);
+                    if matches!(
+                        val.trim().to_ascii_lowercase().as_str(),
+                        "0" | "restore" | "stock" | "reset"
+                    ) {
+                        restore_all_prompts = true;
+                    } else {
+                        preset_query = Some(val.clone());
                     }
                 }
             }
@@ -165,7 +173,14 @@ fn main() {
             }
             _ if a.starts_with("--prompt=") => {
                 let val = &a["--prompt=".len()..];
-                prompt_tier = PromptTier::from_cli_str(val);
+                if matches!(
+                    val.trim().to_ascii_lowercase().as_str(),
+                    "0" | "restore" | "stock" | "reset"
+                ) {
+                    restore_all_prompts = true;
+                } else {
+                    preset_query = Some(val.to_string());
+                }
             }
             _ if a.starts_with("--context=") => {
                 let val = &a["--context=".len()..];
@@ -184,20 +199,33 @@ fn main() {
         return;
     }
 
+    let mut prompt_patch: Option<PromptPatch> = None;
+
     if full_recommended {
-        prompt_tier = Some(PromptTier::Tier4StockPlusGuardrails);
         context_mode = Some(ContextMode::Unlock900K);
         do_inject_hud = true;
     }
 
     if full_restore {
-        prompt_tier = Some(PromptTier::Stock);
+        restore_all_prompts = true;
         context_mode = Some(ContextMode::Stock);
         do_restore_hud = true;
     }
 
-    if prompt_tier.is_some() || context_mode.is_some() {
-        match execute_patch_operations(prompt_tier, context_mode) {
+    if restore_all_prompts {
+        prompt_patch = Some(PromptPatch::stock());
+    } else if let Some(q) = preset_query {
+        match resolve_preset(&q) {
+            Ok(p) => prompt_patch = Some(p.to_patch()),
+            Err(e) => {
+                eprintln!("✖ {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    if prompt_patch.is_some() || context_mode.is_some() {
+        match execute_patch_operations(prompt_patch.as_ref(), context_mode) {
             Ok(logs) => {
                 for l in logs {
                     println!("{}", l);

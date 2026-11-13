@@ -1,5 +1,5 @@
 use crate::asar::{repack_asar_in_memory, AsarArchive};
-use crate::patcher::{local_appdata_dir, ContextMode};
+use crate::patcher::{app_backup_dir, local_appdata_dir, ContextMode};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -60,6 +60,10 @@ pub fn antigravity_asar_path() -> PathBuf {
         .join("app.asar")
 }
 
+pub fn asar_backup_path() -> PathBuf {
+    app_backup_dir().join("app.asar.bak")
+}
+
 pub fn roam_appdata_dir() -> PathBuf {
     if let Ok(p) = std::env::var("APPDATA") {
         return PathBuf::from(p);
@@ -87,7 +91,8 @@ pub fn detect_active_cdp_port() -> Option<u16> {
 
 pub fn inspect_hud_state() -> HudInspection {
     let asar_path = antigravity_asar_path();
-    let bak_path = PathBuf::from(format!("{}.bak", asar_path.display()));
+    let bak_path = asar_backup_path();
+    let legacy_adj_bak = PathBuf::from(format!("{}.bak", asar_path.display()));
     let asar_exists = asar_path.exists();
     let cdp_port = detect_active_cdp_port();
 
@@ -126,7 +131,8 @@ pub fn inspect_hud_state() -> HudInspection {
                 };
 
                 let legacy_bak = find_legacy_context_meter_backup(&app_version);
-                let bak_exists = bak_path.exists() || legacy_bak.is_some();
+                let bak_exists =
+                    bak_path.exists() || legacy_adj_bak.exists() || legacy_bak.is_some();
 
                 HudInspection {
                     asar_path,
@@ -232,6 +238,10 @@ fn sanitize_preload_js(raw_preload: &str) -> String {
 
 /// 确保拥有一份纯净官方 app.asar.bak 备份，返回备份二进制内容
 fn ensure_clean_asar_backup(asar_path: &Path, bak_path: &Path) -> Result<Vec<u8>, String> {
+    if let Some(parent) = bak_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
     if bak_path.exists() {
         let bak_raw = fs::read(bak_path).map_err(|e| format!("读取备份失败: {}", e))?;
         let bak_arch = AsarArchive::parse(&bak_raw)?;
@@ -244,6 +254,23 @@ fn ensure_clean_asar_backup(asar_path: &Path, bak_path: &Path) -> Result<Vec<u8>
             return Ok(cleaned);
         }
         return Ok(bak_raw);
+    }
+
+    let legacy_adj_bak = PathBuf::from(format!("{}.bak", asar_path.display()));
+    if legacy_adj_bak.exists() {
+        if let Ok(legacy_raw) = fs::read(&legacy_adj_bak) {
+            if let Ok(bak_arch) = AsarArchive::parse(&legacy_raw) {
+                let out = if bak_arch.lookup_node("dist/meter-renderer.js").is_some()
+                    || bak_arch.lookup_node("dist/agy-hud.js").is_some()
+                {
+                    build_clean_stock_asar(&legacy_raw)?
+                } else {
+                    legacy_raw
+                };
+                let _ = fs::write(bak_path, &out);
+                return Ok(out);
+            }
+        }
     }
 
     let cur_raw = fs::read(asar_path).map_err(|e| format!("读取当前 app.asar 失败: {}", e))?;
@@ -300,7 +327,7 @@ pub fn install_composer_hud() -> Result<Vec<String>, String> {
     if !asar_path.exists() {
         return Err(format!("未找到目标文件: {}", asar_path.display()));
     }
-    let bak_path = PathBuf::from(format!("{}.bak", asar_path.display()));
+    let bak_path = asar_backup_path();
     let base_raw = ensure_clean_asar_backup(&asar_path, &bak_path)?;
     logs.push(format!("✔ 已确认纯净基准备份: {}", bak_path.display()));
 
@@ -379,7 +406,7 @@ pub fn restore_stock_asar() -> Result<Vec<String>, String> {
     if !asar_path.exists() {
         return Err(format!("未找到目标文件: {}", asar_path.display()));
     }
-    let bak_path = PathBuf::from(format!("{}.bak", asar_path.display()));
+    let bak_path = asar_backup_path();
     let clean_raw = ensure_clean_asar_backup(&asar_path, &bak_path)?;
 
     match write_asar_with_rename_fallback(&asar_path, &clean_raw) {
