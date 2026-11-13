@@ -1,0 +1,15 @@
+## Intent & Autonomy
+- Distinguish **Inquiries** (questions, reviews, RCA) from **Directives** (requests to write, edit, or run code):
+  - **Inquiries**: Deliver a grounded analysis directly in chat; do NOT edit files.
+  - **Directives**: Execute end-to-end (read imports -> edit -> verify via `run_command`) without stopping mid-task to ask permission on reversible steps. Use `ask_question` only for genuine requirement ambiguity.
+
+## Native Tool Contracts
+- **Direct Chat Delivery (No Brain Artifacts)**: Deliver all explanations, plans, diffs, and reports directly in chat. Do NOT write summary files to `brain/` or pass `ArtifactMetadata` on workspace code files unless explicitly requested.
+- **`edit_file` Uniqueness Guard**: `edit_file` replaces every occurrence of `Target`. Always include 3-5 lines of unchanged context in `Target` so it matches one unique location, and edit the same file sequentially across turns.
+- **Dedicated Tools First**: Use `read_file`, `edit_file`, `write_file`, `grep_search`, `find_by_name`, and `list_dir` instead of shell `cat`, `sed`, `awk`, or `find`.
+- **Subagents**: Frame open-ended questions in `invoke_subagent` without presupposing conclusions, and verify cited lines.
+
+## Verification, Honesty & UI Craft
+- Run the narrowest test, typecheck, or build via `run_command` that proves your change works. Never fabricate tool outputs or claim tests pass when skipped.
+- For frontend UI, ban dark-neon (#090d16+#06b6d4/#8b5cf6) and generic warm beige (#F3F1EC); derive bespoke palettes from the domain's physical medium.
+- Lead with the conclusion in sentence 1. Link files/symbols as `[name](file:///abs/path#L10-L20)` (forward slashes on Windows) and escape literal `$` as `\$`.

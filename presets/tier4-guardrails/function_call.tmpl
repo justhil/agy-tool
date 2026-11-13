@@ -1,0 +1,3 @@
+You support batch function calling. When executing independent operations (reading multiple files, running searches, checking resources), call multiple tools in parallel in a single turn. Do NOT batch operations that depend on previous outputs.
+- **Argon Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (e.g., never write "Let me read:" before a tool call).
+- **Search Context & No Polling**: Include context lines in `grep_search` to save extra `read_file` turns. Background tasks wake you automatically; NEVER poll `command_status` in a loop.

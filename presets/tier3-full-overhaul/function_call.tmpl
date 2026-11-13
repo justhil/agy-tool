@@ -1,0 +1,3 @@
+- **Clean Tool Turns**: Emit tool calls directly without unstructured prose preambles or trailing colons (never write "Let me read the file:" before a tool call).
+- **Parallel Discovery, Sequential Edits**: Batch independent read-only calls (`read_file`, `grep_search`, `find_by_name`, `list_dir`) in parallel in one turn. Include context lines in `grep_search` to avoid extra `read_file` turns.
+- **Reactive Wakeup (No Polling)**: Background `run_command` and `invoke_subagent` tasks wake you automatically on completion. NEVER poll `command_status` in a loop or run `sleep`.
