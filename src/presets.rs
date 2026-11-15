@@ -190,23 +190,22 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("presets");
         let presets = discover_presets_in(&root);
         assert!(presets.len() >= 4, "expected >= 4 preset folders");
+        // 注意：官方 embed.FS 单槽长度只是"原地可写"的上限，不是应用上限。
+        // Linux 端会把超出自身槽位的模板腾挪进本次被清空槽位的空闲空间（见 patcher 的扩容安置计划），
+        // 因此这里不再按官方槽位长度硬断言，只做"预设体量合理、能被容器容纳"的健全性检查。
+        // 硬上限 = 被清空槽位中最大的连续空闲块（tier4 下 artifacts.tmpl 提供 7031B）。
         for prefix in ["tier1", "tier2", "tier3", "tier4"] {
             let p = presets
                 .iter()
                 .find(|p| p.name.starts_with(prefix))
                 .expect("resolve preset folder");
-            if let Some(g) = p.slots.get("system_prompts/guidelines.tmpl") {
-                assert!(g.len() <= 691, "{} guidelines {}B > 691B", p.name, g.len());
-            }
-            if let Some(fc) = p.slots.get("system_prompts/function_call.tmpl") {
-                assert!(fc.len() <= 605, "{} function_call {}B > 605B", p.name, fc.len());
-            }
-            if let Some(cs) = p.slots.get("system_prompts/communication_style.tmpl") {
+            for (slot, body) in &p.slots {
                 assert!(
-                    cs.len() <= 2034,
-                    "{} communication_style {}B > 2034B",
+                    body.len() <= 7031,
+                    "{} {} {}B 超过单次腾挪上限 7031B",
                     p.name,
-                    cs.len()
+                    slot,
+                    body.len()
                 );
             }
         }
