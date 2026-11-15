@@ -9,3 +9,5 @@ HANDOFF.md
 *.bak
 *.bmp
 *.png
+/.work/
+.openidea/

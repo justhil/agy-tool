@@ -1,4 +1,5 @@
 mod asar;
+mod elf;
 mod gui;
 mod injector;
 mod patcher;
@@ -16,7 +17,10 @@ use presets::{discover_presets, match_binary_to_preset, resolve_preset};
 fn print_cli_status() {
     let presets = discover_presets();
     println!("=========================================================================");
-    println!(" AGY-TOOL // Antigravity 二进制与底部 Composer HUD 状态扫描");
+    println!(
+        " AGY-TOOL // Antigravity 二进制与底部 Composer HUD 状态扫描 [{}]",
+        patcher::platform_label()
+    );
     println!("=========================================================================");
     for bin in inspect_all_binaries() {
         println!("\n▶ {}", bin.label);
@@ -51,6 +55,11 @@ fn print_cli_status() {
         }
     }
 
+    let ps = patcher::check_running_processes();
+    println!("\n▶ 运行中的进程 (Linux /proc 扫描 · Windows tasklist)");
+    println!("  agy / language_server: {}", if ps.language_server_running { "运行中" } else { "未运行" });
+    println!("  Antigravity 桌面端:    {}", if ps.antigravity_app_running { "运行中" } else { "未运行" });
+
     let hud = inspect_hud_state();
     println!("\n▶ Antigravity Desktop 前端包 (app.asar)");
     println!("  路径: {}", hud.asar_path.display());
@@ -66,20 +75,26 @@ fn print_cli_status() {
 }
 
 fn print_help() {
+    let exe = if cfg!(windows) { "agy-tool.exe" } else { "agy-tool" };
     println!(
         "\
-AGY-TOOL v1.0 — Antigravity (Gemini 4 Argon) 提示词精简、百万上下文解锁与底部 HUD 工具箱
+AGY-TOOL v1.1 — Antigravity (Gemini 4 Argon) 提示词精简、百万上下文解锁与底部 HUD 工具箱
+当前平台: {}   （Windows 走 PE64，Linux 走 ELF64）
 
 用法:
-  agy-tool.exe                                  # 启动独立轻量高密度 GUI 面板 (默认)
-  agy-tool.exe --status | --inspect             # 只读扫描本机二进制与 HUD 状态
-  agy-tool.exe --prompt <preset|restore>        # 应用 presets/ 下的预设目录，或 restore 还原官方原版
-  agy-tool.exe --context <512k|900k|restore>    # 单独切换上下文窗口门禁档位
-  agy-tool.exe --inject-hud                     # 注入底部 Request Review 左侧 HUD (自动清理旧版顶栏)
-  agy-tool.exe --hot-hud                        # 仅通过 CDP 向运行中窗口实时热注入底部 HUD
-  agy-tool.exe --restore-hud                    # 卸载 HUD 并还原官方纯净 app.asar
-  agy-tool.exe --full                           # 解锁 900K 上下文 + 底部 HUD (可配合 --prompt)
-  agy-tool.exe --restore                        # 一键全部恢复官方默认状态"
+  {exe}                                  # 启动独立轻量高密度 GUI 面板 (默认)
+  {exe} --status | --inspect             # 只读扫描本机二进制与 HUD 状态
+  {exe} --prompt <preset|restore>        # 应用 presets/ 下的预设目录，或 restore 还原官方原版
+  {exe} --context <512k|900k|restore>    # 单独切换上下文窗口门禁档位
+  {exe} --inject-hud                     # 注入底部 Request Review 左侧 HUD (仅 Windows 桌面版 app.asar)
+  {exe} --hot-hud                        # 仅通过 CDP 向运行中窗口实时热注入底部 HUD
+  {exe} --restore-hud                    # 卸载 HUD 并还原官方纯净 app.asar
+  {exe} --full                           # 解锁 900K 上下文 + 底部 HUD (可配合 --prompt)
+  {exe} --restore                        # 一键全部恢复官方默认状态
+
+Linux 内核默认扫描路径: ~/.local/bin/agy、~/.gemini/bin/agy、/usr/local/bin/agy
+自定义目标覆盖:        AGY_TOOL_TARGET=/path/to/agy {exe} --status",
+        patcher::platform_label()
     );
 }
 

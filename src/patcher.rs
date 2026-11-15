@@ -2,12 +2,39 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(windows)]
 use std::time::Duration;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// 跨平台构造子进程：Windows 下隐藏控制台窗口，类 Unix 下无需额外处理
+pub fn hidden_command(program: &str) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
+pub fn platform_label() -> &'static str {
+    if cfg!(windows) {
+        "Windows (PE64)"
+    } else if cfg!(target_os = "macos") {
+        "macOS (Mach-O)"
+    } else {
+        "Linux (ELF64)"
+    }
+}
+
+pub fn is_platform_supported_binary(buf: &[u8]) -> bool {
+    crate::elf::is_elf64_le(buf) || (buf.len() > 2 && &buf[0..2] == b"MZ")
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct PromptPatch {
@@ -120,6 +147,10 @@ pub struct TemplateSlot {
     pub entry_offset: usize,
     pub data_offset: usize,
     pub data_length: usize,
+    /// 模板数据在镜像中的 VA（PE 下为 0，仅 ELF 使用）
+    pub data_va: u64,
+    /// ELF：承载 data 指针的 RELA 记录文件偏移；改写其 r_addend 即可重定位槽位数据
+    pub data_reloc_offset: Option<usize>,
     pub active_bytes: usize,
     pub is_stripped: bool,
     pub is_modified: bool,
@@ -205,20 +236,55 @@ pub fn local_appdata_dir() -> PathBuf {
     if let Ok(p) = std::env::var("LOCALAPPDATA") {
         return PathBuf::from(p);
     }
-    if let Ok(home) = std::env::var("USERPROFILE") {
-        return PathBuf::from(home).join("AppData").join("Local");
+    #[cfg(unix)]
+    {
+        if let Ok(p) = std::env::var("XDG_DATA_HOME") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(".local").join("share");
+        }
+        return PathBuf::from("/tmp");
     }
-    PathBuf::from("C:/Users/Administrator/AppData/Local")
+    #[cfg(windows)]
+    {
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            return PathBuf::from(home).join("AppData").join("Local");
+        }
+        PathBuf::from("C:/Users/Administrator/AppData/Local")
+    }
 }
 
 pub fn user_home_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            return PathBuf::from(home);
+        }
+    }
     if let Ok(home) = std::env::var("USERPROFILE") {
         return PathBuf::from(home);
     }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home);
+    if cfg!(windows) {
+        PathBuf::from("C:/Users/Administrator")
+    } else {
+        PathBuf::from("/tmp")
     }
-    PathBuf::from("C:/Users/Administrator")
+}
+
+/// 在 PATH 中查找可执行文件（`where.exe` 的跨平台替代实现）
+pub fn find_in_path(bin_name: &str) -> Option<PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    let sep = if cfg!(windows) { ';' } else { ':' };
+    for dir in std::env::split_paths(&path_var) {
+        let _ = sep;
+        let candidate = dir.join(bin_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 pub fn app_backup_dir() -> PathBuf {
@@ -254,82 +320,158 @@ fn resolve_existing_binary_bak(id: &str, target_path: &Path) -> Option<PathBuf> 
 }
 
 fn resolve_standalone_agy_path() -> PathBuf {
-    let default_path = local_appdata_dir().join("agy").join("bin").join("agy.exe");
-    if default_path.exists() {
-        return default_path;
-    }
-    if let Ok(out) = Command::new("where.exe")
-        .arg("agy.exe")
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
+    #[cfg(unix)]
     {
-        if out.status.success() {
-            let text = String::from_utf8_lossy(&out.stdout);
-            for line in text.lines() {
-                let p = PathBuf::from(line.trim());
-                if p.exists() {
-                    return p;
+        let home = user_home_dir();
+        let candidates = [
+            home.join(".local").join("bin").join("agy"),
+            home.join(".gemini").join("bin").join("agy"),
+            PathBuf::from("/usr/local/bin/agy"),
+            PathBuf::from("/usr/bin/agy"),
+        ];
+        for c in &candidates {
+            if c.is_file() {
+                return c.clone();
+            }
+        }
+        if let Some(found) = find_in_path("agy") {
+            return found;
+        }
+        return candidates[0].clone();
+    }
+    #[cfg(windows)]
+    {
+        let default_path = local_appdata_dir().join("agy").join("bin").join("agy.exe");
+        if default_path.exists() {
+            return default_path;
+        }
+        if let Ok(out) = hidden_command("where.exe").arg("agy.exe").output() {
+            if out.status.success() {
+                let text = String::from_utf8_lossy(&out.stdout);
+                for line in text.lines() {
+                    let p = PathBuf::from(line.trim());
+                    if p.exists() {
+                        return p;
+                    }
                 }
             }
         }
+        default_path
     }
-    default_path
+}
+
+/// 允许通过 `AGY_TOOL_TARGET` 环境变量覆盖扫描目标（多个路径以 `:` / `;` 分隔）。
+/// 用于自定义安装位置、便携版或回归测试。
+pub fn env_target_overrides() -> Vec<(String, String, PathBuf)> {
+    let Ok(raw) = std::env::var("AGY_TOOL_TARGET") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (i, part) in std::env::split_paths(&raw).enumerate() {
+        if part.as_os_str().is_empty() {
+            continue;
+        }
+        out.push((
+            format!("override_{}", i),
+            format!("自定义目标 (AGY_TOOL_TARGET) {}", part.display()),
+            part,
+        ));
+    }
+    out
 }
 
 pub fn target_binaries() -> Vec<(String, String, PathBuf)> {
+    let overrides = env_target_overrides();
+    if !overrides.is_empty() {
+        return overrides;
+    }
+    #[allow(unused_variables)]
     let local = local_appdata_dir();
     let home = user_home_dir();
-
-    let desktop_path = local
-        .join("Programs")
-        .join("antigravity")
-        .join("resources")
-        .join("bin")
-        .join("language_server.exe");
-
     let standalone_path = resolve_standalone_agy_path();
 
-    let ide_legacy_path = local
-        .join("Programs")
-        .join("Antigravity IDE")
-        .join("resources")
-        .join("app")
-        .join("extensions")
-        .join("antigravity")
-        .join("bin")
-        .join("language_server_windows_x64.exe");
-
-    let ide_hub_path = home.join(".gemini").join("bin").join("agy.exe");
-
-    let mut list = vec![
-        (
-            "cli".to_string(),
-            "桌面端内核 (language_server.exe)".to_string(),
-            desktop_path,
-        ),
-        (
+    #[cfg(unix)]
+    {
+        let mut list = vec![(
             "standalone".to_string(),
-            "独立版 CLI (agy.exe)".to_string(),
+            "Linux CLI 内核 (agy)".to_string(),
             standalone_path.clone(),
-        ),
-    ];
-
-    if ide_legacy_path.exists() || !ide_hub_path.exists() {
-        list.push((
-            "ide".to_string(),
-            "IDE 插件内核 (language_server_windows_x64.exe)".to_string(),
-            ide_legacy_path.clone(),
-        ));
+        )];
+        for (id, label, path) in [
+            (
+                "linux_local_bin",
+                "Linux CLI 内核 (~/.local/bin/agy)",
+                home.join(".local").join("bin").join("agy"),
+            ),
+            (
+                "ide_hub",
+                "IDE / Hub 后端 (~/.gemini/bin/agy)",
+                home.join(".gemini").join("bin").join("agy"),
+            ),
+            (
+                "linux_opt",
+                "Linux 系统级安装 (/usr/local/bin/agy)",
+                PathBuf::from("/usr/local/bin/agy"),
+            ),
+        ] {
+            if path.exists() && path != standalone_path {
+                list.push((id.to_string(), label.to_string(), path));
+            }
+        }
+        return list;
     }
-    if ide_hub_path.exists() && ide_hub_path != standalone_path {
-        list.push((
-            "ide_hub".to_string(),
-            "IDE 2.6+ 后端 (~/.gemini/bin/agy.exe)".to_string(),
-            ide_hub_path,
-        ));
-    }
 
-    list
+    #[cfg(windows)]
+    {
+        let desktop_path = local
+            .join("Programs")
+            .join("antigravity")
+            .join("resources")
+            .join("bin")
+            .join("language_server.exe");
+
+        let ide_legacy_path = local
+            .join("Programs")
+            .join("Antigravity IDE")
+            .join("resources")
+            .join("app")
+            .join("extensions")
+            .join("antigravity")
+            .join("bin")
+            .join("language_server_windows_x64.exe");
+
+        let ide_hub_path = home.join(".gemini").join("bin").join("agy.exe");
+
+        let mut list = vec![
+            (
+                "cli".to_string(),
+                "桌面端内核 (language_server.exe)".to_string(),
+                desktop_path,
+            ),
+            (
+                "standalone".to_string(),
+                "独立版 CLI (agy.exe)".to_string(),
+                standalone_path.clone(),
+            ),
+        ];
+
+        if ide_legacy_path.exists() || !ide_hub_path.exists() {
+            list.push((
+                "ide".to_string(),
+                "IDE 插件内核 (language_server_windows_x64.exe)".to_string(),
+                ide_legacy_path.clone(),
+            ));
+        }
+        if ide_hub_path.exists() && ide_hub_path != standalone_path {
+            list.push((
+                "ide_hub".to_string(),
+                "IDE 2.6+ 后端 (~/.gemini/bin/agy.exe)".to_string(),
+                ide_hub_path,
+            ));
+        }
+
+        list
+    }
 }
 
 // ============================================================================
@@ -384,6 +526,15 @@ pub fn compute_active_bytes(raw_text: &str) -> (usize, bool) {
         }
     }
     (raw_text.len(), false)
+}
+
+/// 统一入口：根据魔数自动选择 PE (Windows) / ELF (Linux) 解析器
+pub fn parse_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateSlot>, String> {
+    if crate::elf::is_elf64_le(buf) {
+        crate::elf::parse_elf_embed_templates(buf)
+    } else {
+        parse_pe_embed_templates(buf)
+    }
 }
 
 pub fn parse_pe_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateSlot>, String> {
@@ -512,6 +663,8 @@ pub fn parse_pe_embed_templates(buf: &[u8]) -> Result<BTreeMap<String, TemplateS
                 entry_offset: e,
                 data_offset: d_off,
                 data_length: d_len,
+                data_va: 0,
+                data_reloc_offset: None,
                 active_bytes,
                 is_stripped,
                 is_modified,
@@ -562,6 +715,52 @@ pub fn write_padded_template(
     buf[start..start + encoded.len()].copy_from_slice(encoded);
     buf[start + encoded.len()..start + slot.data_length].copy_from_slice(&padding);
     Ok(encoded.len())
+}
+
+/// 统计若干文件区间 [start, end) 的并集长度（用于多模板共享同一段物理区域时的容量显示）
+fn union_len(ranges: &[(usize, usize)]) -> usize {
+    let mut v: Vec<(usize, usize)> = ranges.iter().copied().filter(|(s, e)| e > s).collect();
+    v.sort_unstable();
+    let mut total = 0usize;
+    let mut cur: Option<(usize, usize)> = None;
+    for (s, e) in v {
+        match cur {
+            None => cur = Some((s, e)),
+            Some((cs, ce)) if s <= ce => cur = Some((cs, ce.max(e))),
+            Some((cs, ce)) => {
+                total += ce - cs;
+                cur = Some((s, e));
+            }
+        }
+    }
+    if let Some((cs, ce)) = cur {
+        total += ce - cs;
+    }
+    total
+}
+
+/// 把某个槽位的 data 指针与长度重新指向新的文件偏移（ELF：改写 RELA 的 r_addend）。
+/// 仅在 ELF 下有 RELA 可用；PE 槽位返回错误，调用方会退回"原地写入"路径。
+fn repoint_slot_data(
+    buf: &mut [u8],
+    slot: &TemplateSlot,
+    new_off: usize,
+    new_len: usize,
+) -> Result<(), String> {
+    let reloc = slot
+        .data_reloc_offset
+        .ok_or_else(|| "该可执行格式不支持跨槽位扩容".to_string())?;
+    if reloc + 24 > buf.len() || slot.entry_offset + 32 > buf.len() {
+        return Err("重定位表或 embed 条目越界".to_string());
+    }
+    let new_va = slot
+        .data_va
+        .wrapping_add(new_off as u64)
+        .wrapping_sub(slot.data_offset as u64);
+    buf[reloc + 16..reloc + 24].copy_from_slice(&new_va.to_le_bytes());
+    buf[slot.entry_offset + 24..slot.entry_offset + 32]
+        .copy_from_slice(&(new_len as u64).to_le_bytes());
+    Ok(())
 }
 
 pub fn inspect_context_state(buf: &[u8]) -> Vec<ContextGateHit> {
@@ -635,14 +834,29 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
     }
 
     match fs::read(&path) {
+        Ok(buf) if !is_platform_supported_binary(&buf) => BinaryInspection {
+            id,
+            label,
+            path,
+            exists: true,
+            bak_exists,
+            file_size_mb: buf.len() as f64 / (1024.0 * 1024.0),
+            modified_slot_count: 0,
+            stripped_slot_count: 0,
+            total_slot_capacity: 0,
+            active_slot_bytes: 0,
+            slots: Vec::new(),
+            context_gates: Vec::new(),
+            error: Some("二进制格式不受支持（仅支持 Windows PE 与 Linux ELF64）".to_string()),
+        },
         Ok(buf) => {
             let file_size_mb = buf.len() as f64 / (1024.0 * 1024.0);
             let bak_buf_opt = existing_bak.as_ref().and_then(|p| fs::read(p).ok());
             let bak_templates_opt = bak_buf_opt
                 .as_deref()
-                .and_then(|bb| parse_pe_embed_templates(bb).ok());
+                .and_then(|bb| parse_embed_templates(bb).ok());
 
-            match parse_pe_embed_templates(&buf) {
+            match parse_embed_templates(&buf) {
                 Ok(mut templates) => {
                     for (name, slot) in templates.iter_mut() {
                         if let (Some(bak_buf), Some(bak_map)) =
@@ -660,8 +874,19 @@ fn inspect_single_binary(id: String, label: String, path: PathBuf) -> BinaryInsp
 
                     let context_gates = inspect_context_state(&buf);
                     let slots: Vec<TemplateSlot> = templates.into_values().collect();
-                    let total_slot_capacity: usize = slots.iter().map(|s| s.data_length).sum();
-                    let active_slot_bytes: usize = slots.iter().map(|s| s.active_bytes).sum();
+                    // 扩容重定位后，多个条目可能共享同一段物理区域，按区间并集统计避免重复计数
+                    let total_slot_capacity = union_len(
+                        &slots
+                            .iter()
+                            .map(|s| (s.data_offset, s.data_offset + s.data_length))
+                            .collect::<Vec<_>>(),
+                    );
+                    let active_slot_bytes = union_len(
+                        &slots
+                            .iter()
+                            .map(|s| (s.data_offset, s.data_offset + s.active_bytes))
+                            .collect::<Vec<_>>(),
+                    );
                     let modified_slot_count = slots.iter().filter(|s| s.is_modified).count();
                     let stripped_slot_count = slots.iter().filter(|s| s.is_stripped).count();
 
@@ -721,24 +946,44 @@ pub fn apply_prompt_patch_to_buffer(
     bak_buf: &[u8],
     patch: &PromptPatch,
 ) -> Result<String, String> {
-    let bak_templates = parse_pe_embed_templates(bak_buf)?;
-    let cur_templates = parse_pe_embed_templates(buf)?;
+    let bak_templates = parse_embed_templates(bak_buf)?;
+    let mut cur_templates = parse_embed_templates(buf)?;
 
-    // 预先校验各目标槽位字节上限
+    // Step 0: 若上一次应用做过跨槽位扩容（模板数据被搬到别处），先把官方原文搬回官方位置并复位指针，
+    // 保证任意预设切换 / 还原都从 100% 干净的官方原版基线出发。
+    let mut relinked = false;
+    for (key, cur_slot) in &cur_templates {
+        let Some(bak_slot) = bak_templates.get(key) else {
+            continue;
+        };
+        if cur_slot.data_length == bak_slot.data_length
+            || cur_slot.data_reloc_offset.is_none()
+            || bak_slot.data_length == 0
+        {
+            continue;
+        }
+        let (dst, len) = (bak_slot.data_offset, bak_slot.data_length);
+        if dst + len > buf.len() || dst + len > bak_buf.len() {
+            continue;
+        }
+        buf[dst..dst + len].copy_from_slice(&bak_buf[dst..dst + len]);
+        repoint_slot_data(buf, cur_slot, dst, len)?;
+        relinked = true;
+    }
+    if relinked {
+        cur_templates = parse_embed_templates(buf)?;
+    }
+
+    // 统计各目标槽位需求；超出原地容量的先记账，稍后通过"腾挪扩容"安置
     let mut ops: Vec<(String, &String)> = Vec::with_capacity(patch.slots.len());
+    let mut oversized: Vec<(String, usize)> = Vec::new();
     for (raw_key, text) in &patch.slots {
         let key = normalize_slot_key(raw_key);
         let Some(cur_slot) = cur_templates.get(&key) else {
             continue;
         };
         if text.len() > cur_slot.data_length {
-            return Err(format!(
-                "模板 {} 超出上限: 当前 {}B > 上限 {}B (超出 {}B)",
-                display_slot_name(&key),
-                text.len(),
-                cur_slot.data_length,
-                text.len() - cur_slot.data_length
-            ));
+            oversized.push((key.clone(), text.len()));
         }
         ops.push((key, text));
     }
@@ -755,16 +1000,113 @@ pub fn apply_prompt_patch_to_buffer(
         }
     }
 
+    // 扩容安置计划：把超出自身槽位的模板放进本次被清空/缩短的槽位剩余空间里（ELF 重定位指针）
+    let mut plan: Vec<(String, usize)> = Vec::new();
+    if !oversized.is_empty() {
+        if !cur_templates.values().any(|s| s.data_reloc_offset.is_some()) {
+            let (key, need) = &oversized[0];
+            let cap = cur_templates.get(key).map(|s| s.data_length).unwrap_or(0);
+            return Err(format!(
+                "模板 {} 超出上限: 当前 {}B > 上限 {}B (超出 {}B)",
+                display_slot_name(key),
+                need,
+                cap,
+                need - cap
+            ));
+        }
+        // 空闲池：(文件偏移, 可用字节)；来自本次被改写/清空的槽位
+        let mut blocks: Vec<(usize, usize)> = Vec::new();
+        for (key, slot) in &cur_templates {
+            let Some((_, text)) = ops.iter().find(|(k, _)| k == key) else {
+                continue;
+            };
+            if slot.data_length == 0 {
+                continue;
+            }
+            // 超容槽位的内容会被整体搬走，其原区域全部计入空闲池
+            let used = if text.len() > slot.data_length {
+                0
+            } else {
+                text.len()
+            };
+            let free = slot.data_length - used;
+            if free > 0 {
+                blocks.push((slot.data_offset + used, free));
+            }
+        }
+        // 合并文件上相邻的空闲块（相邻槽位同时被清空时可形成更大的连续区）
+        blocks.sort_by_key(|(o, _)| *o);
+        let mut merged: Vec<(usize, usize)> = Vec::new();
+        for (o, l) in blocks {
+            match merged.last_mut() {
+                Some(last) if last.0 + last.1 == o => last.1 += l,
+                _ => merged.push((o, l)),
+            }
+        }
+        let mut blocks = merged;
+        let pool_total: usize = blocks.iter().map(|(_, l)| *l).sum();
+        let max_block = blocks.iter().map(|(_, l)| *l).max().unwrap_or(0);
+        oversized.sort_by(|a, b| b.1.cmp(&a.1));
+        for (key, need) in &oversized {
+            let mut placed = None;
+            for b in blocks.iter_mut() {
+                if b.1 >= *need {
+                    placed = Some(b.0);
+                    b.0 += need;
+                    b.1 -= need;
+                    break;
+                }
+            }
+            match placed {
+                Some(off) => plan.push((key.clone(), off)),
+                None => {
+                    return Err(format!(
+                        "模板 {} 需要 {}B，本机单槽上限 {}B，可腾挪空间合计 {}B（最大连续块 {}B）仍不足。\
+可清空一个更大的模板（如 artifacts.tmpl）来扩展容器。",
+                        display_slot_name(key),
+                        need,
+                        cur_templates
+                            .get(key)
+                            .map(|s| s.data_length)
+                            .unwrap_or(0),
+                        pool_total,
+                        max_block
+                    ));
+                }
+            }
+        }
+    }
+
     let mut replaced_count = 0usize;
     let mut stripped_count = 0usize;
     for (key, text) in &ops {
         let cur_slot = &cur_templates[key];
-        write_padded_template(buf, cur_slot, text)?;
+        if plan.iter().any(|(k, _)| k == key) {
+            // 内容稍后写入空闲池；原槽位用注释垫平，避免残留官方正文被误读
+            write_padded_template(buf, cur_slot, "")?;
+        } else {
+            write_padded_template(buf, cur_slot, text)?;
+        }
         if text.is_empty() {
             stripped_count += 1;
         } else {
             replaced_count += 1;
         }
+    }
+
+    // 第二轮：把超容模板写入空闲池并重定位 data 指针与长度
+    for (key, off) in &plan {
+        let cur_slot = &cur_templates[key];
+        let text = ops
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, t)| t.as_str())
+            .unwrap_or("");
+        if off + text.len() > buf.len() {
+            return Err("扩容写入越界".to_string());
+        }
+        buf[*off..*off + text.len()].copy_from_slice(text.as_bytes());
+        repoint_slot_data(buf, cur_slot, *off, text.len())?;
     }
 
     let is_stock = ops.is_empty();
@@ -943,7 +1285,14 @@ pub fn execute_patch_operations(
 
     if processed_count == 0 {
         return Err(
-            "未检测到任何已安装的 Antigravity 内核文件（已检查桌面端 language_server.exe、独立版 %LOCALAPPDATA%\\agy\\bin\\agy.exe 及 IDE 端）".to_string()
+            #[cfg(unix)]
+            {
+                "未检测到任何已安装的 Antigravity 内核文件（已检查 ~/.local/bin/agy、~/.gemini/bin/agy、/usr/local/bin/agy）".to_string()
+            },
+            #[cfg(windows)]
+            {
+                "未检测到任何已安装的 Antigravity 内核文件（已检查桌面端 language_server.exe、独立版 %LOCALAPPDATA%\\agy\\bin\\agy.exe 及 IDE 端）".to_string()
+            }
         );
     }
 
@@ -983,37 +1332,138 @@ fn write_binary_with_unlock(
     let stale_path = PathBuf::from(format!("{}.old_run", path.display()));
     let _ = fs::remove_file(&stale_path);
 
-    // 1. 若进程未运行（文件未锁定），直接原位增量写入变更段（<5ms）
-    if let Ok(n) = write_changed_ranges_in_place(path, old_buf, new_buf) {
-        return Ok(n);
-    }
-
-    // 2. 若 language_server 正在运行锁定文件：利用 Windows 允许将运行中 .exe 同目录重命名的特性，
-    //    不杀进程（避免正在打开的 Antigravity 页面断连），将旧运行实例改名为 .old_run 后写入新二进制
-    if fs::rename(path, &stale_path).is_ok() {
-        match fs::write(path, new_buf) {
-            Ok(_) => {
-                let _ = fs::remove_file(&stale_path);
-                return Ok(new_buf.len());
-            }
-            Err(e) => {
-                let _ = fs::rename(&stale_path, path);
-                return Err(e);
+    // Linux：若二进制正在被进程映射执行，对 ELF 原位写入会触发 SIGBUS，
+    // 因此改用同目录 rename + 重建的原子替换；未运行时才走增量原位写入（<5ms）。
+    #[cfg(unix)]
+    {
+        // 保留原始权限位（可执行位 / 属主可写），避免 rename+重建后丢失 0755
+        let perms = fs::metadata(path).ok().map(|m| m.permissions());
+        if !is_binary_in_use(path) {
+            if let Ok(n) = write_changed_ranges_in_place(path, old_buf, new_buf) {
+                return Ok(n);
             }
         }
-    }
-
-    // 3. 极端情况（上次遗留的 .old_run 仍被占用）：短暂释放旧进程后再原位写入
-    let _ = kill_language_servers();
-    for wait_ms in [40u64, 80, 150] {
-        std::thread::sleep(Duration::from_millis(wait_ms));
-        let _ = fs::remove_file(&stale_path);
+        if fs::rename(path, &stale_path).is_ok() {
+            match fs::write(path, new_buf) {
+                Ok(_) => {
+                    if let Some(p) = perms {
+                        let _ = fs::set_permissions(path, p);
+                    }
+                    let _ = fs::remove_file(&stale_path);
+                    return Ok(new_buf.len());
+                }
+                Err(e) => {
+                    let _ = fs::rename(&stale_path, path);
+                    return Err(e);
+                }
+            }
+        }
         if let Ok(n) = write_changed_ranges_in_place(path, old_buf, new_buf) {
             return Ok(n);
         }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "无法替换或写入目标二进制（请检查文件与目录权限）",
+        ))
     }
 
-    write_changed_ranges_in_place(path, old_buf, new_buf)
+    // Windows 路径
+    #[cfg(windows)]
+    {
+        // 1. 进程未运行（文件未锁定）时直接原位增量写入变更段（<5ms）
+        if let Ok(n) = write_changed_ranges_in_place(path, old_buf, new_buf) {
+            return Ok(n);
+        }
+
+        // 2. 若 language_server 正在运行锁定文件：利用 Windows 允许将运行中 .exe 同目录重命名的特性，
+        //    不杀进程（避免正在打开的 Antigravity 页面断连），将旧运行实例改名为 .old_run 后写入新二进制
+        if fs::rename(path, &stale_path).is_ok() {
+            match fs::write(path, new_buf) {
+                Ok(_) => {
+                    let _ = fs::remove_file(&stale_path);
+                    return Ok(new_buf.len());
+                }
+                Err(e) => {
+                    let _ = fs::rename(&stale_path, path);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 3. 极端情况（上次遗留的 .old_run 仍被占用）：短暂释放旧进程后再原位写入
+        let _ = kill_language_servers();
+        for wait_ms in [40u64, 80, 150] {
+            std::thread::sleep(Duration::from_millis(wait_ms));
+            let _ = fs::remove_file(&stale_path);
+            if let Ok(n) = write_changed_ranges_in_place(path, old_buf, new_buf) {
+                return Ok(n);
+            }
+        }
+
+        return write_changed_ranges_in_place(path, old_buf, new_buf);
+    }
+
+    #[cfg(not(any(windows, unix)))]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "不支持的平台",
+    ))
+}
+
+/// 判断目标二进制是否正被进程映射执行（Linux 通过 /proc/<pid>/exe 的 dev+ino 比对）
+#[cfg(unix)]
+pub fn is_binary_in_use(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(md) = fs::metadata(path) else {
+        return false;
+    };
+    let (dev, ino) = (md.dev(), md.ino());
+    let Ok(rd) = fs::read_dir("/proc") else {
+        return false;
+    };
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy().to_string();
+        if !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        if let Ok(exe_md) = fs::metadata(entry.path().join("exe")) {
+            if exe_md.dev() == dev && exe_md.ino() == ino {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 枚举正在运行的 agy / language_server / antigravity 进程
+#[cfg(unix)]
+fn running_agy_pids() -> Vec<u32> {
+    let mut pids = Vec::new();
+    let Ok(rd) = fs::read_dir("/proc") else {
+        return pids;
+    };
+    for entry in rd.flatten() {
+        let name = entry.file_name();
+        let Ok(pid) = name.to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let base = entry.path();
+        let comm = fs::read_to_string(base.join("comm")).unwrap_or_default();
+        let comm = comm.trim();
+        let mut hit = comm == "agy" || comm == "antigravity" || comm.starts_with("language_server");
+        if !hit {
+            if let Ok(exe) = fs::read_link(base.join("exe")) {
+                if let Some(f) = exe.file_name().and_then(|s| s.to_str()) {
+                    hit = f == "agy" || f.starts_with("language_server");
+                }
+            }
+        }
+        if hit {
+            pids.push(pid);
+        }
+    }
+    pids
 }
 
 fn write_changed_ranges_in_place(
@@ -1049,41 +1499,79 @@ fn write_changed_ranges_in_place(
 }
 
 pub fn check_running_processes() -> ProcessStatus {
-    let output = Command::new("tasklist")
-        .args(["/NH", "/FO", "CSV"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output();
-    let Ok(out) = output else {
-        return ProcessStatus::default();
-    };
-    let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
-    ProcessStatus {
-        antigravity_app_running: text.contains("\"antigravity.exe\""),
-        language_server_running: text.contains("\"language_server.exe\"")
-            || text.contains("\"language_server_windows_x64.exe\"")
-            || text.contains("\"agy.exe\""),
+    #[cfg(unix)]
+    {
+        let mut cli = false;
+        let mut desktop = false;
+        for pid in running_agy_pids() {
+            let comm = fs::read_to_string(format!("/proc/{}/comm", pid)).unwrap_or_default();
+            let comm = comm.trim();
+            if comm == "antigravity" {
+                desktop = true;
+            } else if comm == "agy" || comm.starts_with("language_server") {
+                cli = true;
+            }
+        }
+        return ProcessStatus {
+            antigravity_app_running: desktop,
+            language_server_running: cli,
+        };
+    }
+
+    #[cfg(windows)]
+    {
+        let Ok(out) = hidden_command("tasklist").args(["/NH", "/FO", "CSV"]).output() else {
+            return ProcessStatus::default();
+        };
+        let text = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
+        ProcessStatus {
+            antigravity_app_running: text.contains("\"antigravity.exe\""),
+            language_server_running: text.contains("\"language_server.exe\"")
+                || text.contains("\"language_server_windows_x64.exe\"")
+                || text.contains("\"agy.exe\""),
+        }
     }
 }
 
 pub fn kill_language_servers() -> Vec<String> {
     let mut logs = Vec::new();
-    for img in [
-        "language_server.exe",
-        "language_server_windows_x64.exe",
-        "agy.exe",
-    ] {
-        if let Ok(out) = Command::new("taskkill")
-            .args(["/F", "/IM", img])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-        {
-            if out.status.success() {
-                logs.push(format!("已终止进程: {}", img));
+
+    #[cfg(unix)]
+    {
+        let pids = running_agy_pids();
+        if pids.is_empty() {
+            logs.push("当前无运行中的 agy / language_server 进程".to_string());
+            return logs;
+        }
+        for pid in pids {
+            let ok = hidden_command("kill")
+                .args(["-TERM", &pid.to_string()])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            if ok {
+                logs.push(format!("已终止进程: agy (pid {})", pid));
             }
         }
+        logs
     }
-    if logs.is_empty() {
-        logs.push("当前无运行中的 language_server 进程".to_string());
+
+    #[cfg(windows)]
+    {
+        for img in [
+            "language_server.exe",
+            "language_server_windows_x64.exe",
+            "agy.exe",
+        ] {
+            if let Ok(out) = hidden_command("taskkill").args(["/F", "/IM", img]).output() {
+                if out.status.success() {
+                    logs.push(format!("已终止进程: {}", img));
+                }
+            }
+        }
+        if logs.is_empty() {
+            logs.push("当前无运行中的 language_server 进程".to_string());
+        }
+        logs
     }
-    logs
 }

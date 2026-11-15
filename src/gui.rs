@@ -5,7 +5,7 @@ use crate::injector::{
 };
 use crate::patcher::{
     check_running_processes, display_slot_name, execute_patch_operations, inspect_all_binaries,
-    kill_language_servers, local_appdata_dir, BinaryInspection, ContextMode, ProcessStatus,
+    kill_language_servers, BinaryInspection, ContextMode, ProcessStatus,
     PromptPatch, TemplateSlot,
 };
 use crate::presets::{discover_presets, match_binary_to_preset, PromptPreset};
@@ -82,11 +82,7 @@ impl AgyToolApp {
 
         let (tx, rx) = mpsc::channel();
         let placeholder_hud = HudInspection {
-            asar_path: local_appdata_dir()
-                .join("Programs")
-                .join("antigravity")
-                .join("resources")
-                .join("app.asar"),
+            asar_path: crate::injector::antigravity_asar_path(),
             bak_path: PathBuf::new(),
             asar_exists: true,
             bak_exists: false,
@@ -1579,10 +1575,21 @@ fn draw_kv_tag(ui: &mut egui::Ui, k: &str, v: &str, v_col: Color32) {
 fn setup_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
 
+    #[cfg(windows)]
     let cjk_candidates = [
         "C:/Windows/Fonts/msyh.ttc",
         "C:/Windows/Fonts/msyh.ttf",
         "C:/Windows/Fonts/simhei.ttf",
+    ];
+    #[cfg(unix)]
+    let cjk_candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/arphic/uming.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ];
     for path in cjk_candidates {
         if let Ok(bytes) = fs::read(path) {
@@ -1599,7 +1606,21 @@ fn setup_fonts(ctx: &egui::Context) {
         }
     }
 
-    if let Ok(bytes) = fs::read("C:/Windows/Fonts/seguisym.ttf") {
+    #[cfg(windows)]
+    let sym_candidates = ["C:/Windows/Fonts/seguisym.ttf"];
+    #[cfg(unix)]
+    let sym_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+    ];
+    let mut sym_bytes = None;
+    for p in sym_candidates {
+        if let Ok(b) = fs::read(p) {
+            sym_bytes = Some(b);
+            break;
+        }
+    }
+    if let Some(bytes) = sym_bytes {
         fonts
             .font_data
             .insert("seguisym".to_string(), FontData::from_owned(bytes));
@@ -1611,7 +1632,21 @@ fn setup_fonts(ctx: &egui::Context) {
         }
     }
 
-    if let Ok(bytes) = fs::read("C:/Windows/Fonts/consola.ttf") {
+    #[cfg(windows)]
+    let mono_candidates = ["C:/Windows/Fonts/consola.ttf"];
+    #[cfg(unix)]
+    let mono_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansMono-Regular.ttf",
+    ];
+    let mut mono_bytes = None;
+    for p in mono_candidates {
+        if let Ok(b) = fs::read(p) {
+            mono_bytes = Some(b);
+            break;
+        }
+    }
+    if let Some(bytes) = mono_bytes {
         fonts
             .font_data
             .insert("consolas".to_string(), FontData::from_owned(bytes));

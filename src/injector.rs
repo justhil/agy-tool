@@ -53,11 +53,36 @@ pub struct HudInspection {
 }
 
 pub fn antigravity_asar_path() -> PathBuf {
-    local_appdata_dir()
-        .join("Programs")
-        .join("antigravity")
-        .join("resources")
-        .join("app.asar")
+    #[cfg(unix)]
+    {
+        // Linux 桌面版（Electron）尚无统一安装路径约定，逐个探测常见位置
+        let home = crate::patcher::user_home_dir();
+        let candidates = [
+            PathBuf::from("/opt/Antigravity/resources/app.asar"),
+            PathBuf::from("/opt/antigravity/resources/app.asar"),
+            PathBuf::from("/usr/lib/antigravity/resources/app.asar"),
+            PathBuf::from("/usr/share/antigravity/resources/app.asar"),
+            home.join(".local")
+                .join("share")
+                .join("antigravity")
+                .join("resources")
+                .join("app.asar"),
+        ];
+        for c in &candidates {
+            if c.exists() {
+                return c.clone();
+            }
+        }
+        return candidates[0].clone();
+    }
+    #[cfg(windows)]
+    {
+        local_appdata_dir()
+            .join("Programs")
+            .join("antigravity")
+            .join("resources")
+            .join("app.asar")
+    }
 }
 
 pub fn asar_backup_path() -> PathBuf {
@@ -68,10 +93,25 @@ pub fn roam_appdata_dir() -> PathBuf {
     if let Ok(p) = std::env::var("APPDATA") {
         return PathBuf::from(p);
     }
-    if let Ok(home) = std::env::var("USERPROFILE") {
-        return PathBuf::from(home).join("AppData").join("Roaming");
+    #[cfg(unix)]
+    {
+        if let Ok(p) = std::env::var("XDG_CONFIG_HOME") {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home).join(".config");
+        }
+        return PathBuf::from("/tmp");
     }
-    PathBuf::from("C:/Users/Administrator/AppData/Roaming")
+    #[cfg(windows)]
+    {
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            return PathBuf::from(home).join("AppData").join("Roaming");
+        }
+        PathBuf::from("C:/Users/Administrator/AppData/Roaming")
+    }
 }
 
 pub fn detect_active_cdp_port() -> Option<u16> {
