@@ -1,0 +1,11 @@
+{
+  "lossless-rehydrate": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node scripts/rehydrate-hook.mjs",
+        "timeout": 15
+      }
+    ]
+  }
+}

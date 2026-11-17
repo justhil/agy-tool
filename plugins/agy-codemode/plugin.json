@@ -1,0 +1,13 @@
+{
+  "name": "agy-codemode",
+  "displayName": "AGY Codemode & Parallel Sandbox",
+  "version": "1.0.0",
+  "description": "Adds a zero-dependency Node.js VM codemode sandbox and batch_reads MCP tools for single-turn parallel codebase exploration, filtering, and Argon anti-hallucination rules.",
+  "author": "justhil",
+  "repository": "https://github.com/justhil/agy-tool",
+  "suggestedPrompts": [
+    "Use codemode to inspect all source modules in parallel and summarize the architecture",
+    "Batch read the target files and their imported dependencies before editing",
+    "Run grep and stat across the repository inside codemode and return only the matching lines"
+  ]
+}

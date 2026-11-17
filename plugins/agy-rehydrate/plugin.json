@@ -1,0 +1,8 @@
+{
+  "name": "agy-rehydrate",
+  "displayName": "AGY Lossless Rehydrate (512K)",
+  "version": "1.0.0",
+  "description": "Zero-overhead PreInvocation hook that preserves prompt cache during normal turns and losslessly rehydrates user timeline, /fork lineage, verbatim dialogue, skills/specs, and hot workspace files after any compaction checkpoint (Windows/Desktop/CLI/IDE compatible).",
+  "author": "justhil",
+  "repository": "https://github.com/justhil/agy-tool"
+}

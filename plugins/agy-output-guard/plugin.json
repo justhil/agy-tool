@@ -1,0 +1,8 @@
+{
+  "name": "agy-output-guard",
+  "displayName": "AGY Output Flood Guard",
+  "version": "1.0.0",
+  "description": "Automatically archives oversized tool outputs (>28KB or >750 lines) to scratch files and replaces the inline result with head/tail slices and file pointers via PostToolUse overwriteResult.",
+  "author": "justhil",
+  "repository": "https://github.com/justhil/agy-tool"
+}

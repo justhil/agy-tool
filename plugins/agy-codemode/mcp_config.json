@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agy_codemode": {
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/scripts/codemode-mcp.mjs"]
+    }
+  }
+}

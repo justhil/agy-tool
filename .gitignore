@@ -3,8 +3,8 @@
 /artifacts/
 /.ccg/
 /.cargo/
-AGENTS.md
-HANDOFF.md
+/AGENTS.md
+/HANDOFF.md
 *.exe
 *.bak
 *.bmp

@@ -2,6 +2,7 @@ mod asar;
 mod gui;
 mod injector;
 mod patcher;
+mod plugins;
 mod presets;
 
 use eframe::egui;
@@ -11,39 +12,74 @@ use injector::{
     restore_stock_asar,
 };
 use patcher::{execute_patch_operations, inspect_all_binaries, ContextMode, PromptPatch};
+use plugins::{
+    detect_node, detect_pi_ecosystem, inspect_all_plugins, install_all_plugins,
+    plugins_root_dir, run_plugin_smoke_checks, uninstall_all_plugins,
+};
 use presets::{discover_presets, match_binary_to_preset, resolve_preset};
 
 fn print_cli_status() {
     let presets = discover_presets();
+    let node = detect_node();
+    let pi = detect_pi_ecosystem();
+
     println!("=========================================================================");
-    println!(" AGY-TOOL // Antigravity 二进制与底部 Composer HUD 状态扫描");
+    println!(" AGY-TOOL v2.0 // Antigravity 合规插件中心、状态栏与内核扫描");
     println!("=========================================================================");
+
+    println!("\n▶ 合规插件运行环境 (~/.gemini/config/plugins/)");
+    println!("  安装目录: {}", plugins_root_dir().display());
+    println!(
+        "  Node.js: {} (PATH={}, 版本={})",
+        node.runnable_exe(),
+        node.in_path,
+        node.version.as_deref().unwrap_or("未检测到")
+    );
+    println!(
+        "  Pi 生态检测: .pi/agent={}, fast-context={}, pi-search={}, devin-search={}, jiti={}",
+        pi.has_pi_dir, pi.has_fast_context, pi.has_pi_search, pi.has_devin_search, pi.has_jiti
+    );
+
+    for p in inspect_all_plugins(&node) {
+        let status = if !p.installed {
+            "未安装"
+        } else if !p.files_match {
+            "已安装 (有更新)"
+        } else if p.enabled {
+            "已启用 (最新)"
+        } else {
+            "已安装 (已停用)"
+        };
+        println!("  - {:<18} [{}] -> {}", p.dir_name, status, p.install_dir.display());
+    }
+
+    println!("\n▶ Antigravity 二进制内核检测");
     for bin in inspect_all_binaries() {
-        println!("\n▶ {}", bin.label);
-        println!("  路径: {}", bin.path.display());
+        println!("\n  ● {}", bin.label);
+        println!("    路径: {}", bin.path.display());
         if !bin.exists {
-            println!("  [未安装] 未找到该二进制文件，跳过。");
+            println!("    [未安装]");
             continue;
         }
         println!(
-            "  备份: {}",
+            "    备份: {}",
             if bin.bak_exists {
-                "已存在 (.bak)"
+                "已存在 (backup/*.bak)"
             } else {
-                "尚未创建 (首次修改时自动备份)"
+                "尚未创建 (首次修改时自动备份到 backup/)"
             }
         );
         let matched = match_binary_to_preset(&bin.slots, &presets).map(|p| p.name.as_str());
-        println!("  提示词状态: {}", bin.prompt_status_label(matched));
+        println!("    提示词状态: {}", bin.prompt_status_label(matched));
         println!(
-            "  embed.FS 容量: {:.1} KB 有效 / {:.1} KB 总计 ({} 个模板槽位)",
+            "    embed.FS 容量: {:.1} KB 有效 / {:.1} KB 总计 ({} 个模板槽位)",
             bin.active_slot_bytes as f64 / 1024.0,
             bin.total_slot_capacity as f64 / 1024.0,
             bin.slots.len()
         );
         for g in &bin.context_gates {
             println!(
-                "  上下文门禁: [{}] ({} @0x{:X})",
+                "    上下文门禁: [{}] ({} @0x{:X})",
                 g.mode.label(),
                 g.desc,
                 g.offset
@@ -68,16 +104,21 @@ fn print_cli_status() {
 fn print_help() {
     println!(
         "\
-AGY-TOOL v1.0 — Antigravity (Gemini 4 Argon) 提示词精简、百万上下文解锁与底部 HUD 工具箱
+AGY-TOOL v2.0 — Antigravity 合规增强中心 (Codemode / Output Guard / 512K Rehydrate / Pi Bridge) 与工具箱
 
 用法:
   agy-tool.exe                                  # 启动独立轻量高密度 GUI 面板 (默认)
-  agy-tool.exe --status | --inspect             # 只读扫描本机二进制与 HUD 状态
-  agy-tool.exe --prompt <preset|restore>        # 应用 presets/ 下的预设目录，或 restore 还原官方原版
-  agy-tool.exe --context <512k|900k|restore>    # 单独切换上下文窗口门禁档位
+  agy-tool.exe --status | --inspect             # 只读扫描合规插件、Node/Pi 生态、内核与 HUD 状态
+  agy-tool.exe --install-plugins                # 一键安装并启用全部 4 个合规插件 (0 改二进制)
+  agy-tool.exe --uninstall-plugins              # 一键卸载全部合规插件并清理 config.json
+  agy-tool.exe --check-plugins                  # 实机冒烟检测已安装插件的 MCP 握手与 Hook 响应
   agy-tool.exe --inject-hud                     # 注入底部 Request Review 左侧 HUD (自动清理旧版顶栏)
   agy-tool.exe --hot-hud                        # 仅通过 CDP 向运行中窗口实时热注入底部 HUD
   agy-tool.exe --restore-hud                    # 卸载 HUD 并还原官方纯净 app.asar
+
+旧版高风险二进制补丁选项 (读取同级 presets/ 目录，备份至 backup/):
+  agy-tool.exe --prompt <preset|restore>        # 应用 presets/ 下的预设目录，或 restore 还原官方原版
+  agy-tool.exe --context <512k|900k|restore>    # 单独切换上下文窗口门禁档位
   agy-tool.exe --full                           # 解锁 900K 上下文 + 底部 HUD (可配合 --prompt)
   agy-tool.exe --restore                        # 一键全部恢复官方默认状态"
     );
@@ -86,9 +127,9 @@ AGY-TOOL v1.0 — Antigravity (Gemini 4 Argon) 提示词精简、百万上下文
 fn launch_gui(dump_ui_path: Option<String>) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("AGY-TOOL — Antigravity 提示词精简、上下文解锁与状态栏工具")
-            .with_inner_size([1080.0, 840.0])
-            .with_min_inner_size([920.0, 680.0]),
+            .with_title("AGY-TOOL v2.0 — Antigravity 合规增强中心与工具箱")
+            .with_inner_size([1120.0, 820.0])
+            .with_min_inner_size([960.0, 680.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -113,6 +154,9 @@ fn main() {
     }
 
     let mut inspect_only = false;
+    let mut do_install_plugins = false;
+    let mut do_uninstall_plugins = false;
+    let mut do_check_plugins = false;
     let mut full_restore = false;
     let mut full_recommended = false;
     let mut preset_query: Option<String> = None;
@@ -130,8 +174,17 @@ fn main() {
                 print_help();
                 return;
             }
-            "--inspect" | "-i" | "--status" => {
+            "--inspect" | "-i" | "--status" | "--plugin-status" => {
                 inspect_only = true;
+            }
+            "--install-plugins" => {
+                do_install_plugins = true;
+            }
+            "--uninstall-plugins" => {
+                do_uninstall_plugins = true;
+            }
+            "--check-plugins" => {
+                do_check_plugins = true;
             }
             "--restore" | "--reset" => {
                 full_restore = true;
@@ -196,6 +249,48 @@ fn main() {
 
     if inspect_only {
         print_cli_status();
+        return;
+    }
+
+    if do_install_plugins {
+        let node = detect_node();
+        match install_all_plugins(&node) {
+            Ok(logs) => {
+                for l in logs {
+                    println!("{}", l);
+                }
+            }
+            Err(e) => {
+                eprintln!("✖ 安装合规插件失败: {}", e);
+                std::process::exit(1);
+            }
+        }
+        for l in run_plugin_smoke_checks(&node) {
+            println!("{}", l);
+        }
+        return;
+    }
+
+    if do_uninstall_plugins {
+        match uninstall_all_plugins() {
+            Ok(logs) => {
+                for l in logs {
+                    println!("{}", l);
+                }
+            }
+            Err(e) => {
+                eprintln!("✖ 卸载合规插件失败: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    if do_check_plugins {
+        let node = detect_node();
+        for l in run_plugin_smoke_checks(&node) {
+            println!("{}", l);
+        }
         return;
     }
 
