@@ -13,7 +13,7 @@ use injector::{
 };
 use patcher::{execute_patch_operations, inspect_all_binaries, ContextMode, PromptPatch};
 use plugins::{
-    detect_node, detect_pi_ecosystem, inspect_all_plugins, install_all_plugins,
+    detect_node, inspect_all_plugins, inspect_permission_optimization, install_all_plugins,
     plugins_root_dir, run_plugin_smoke_checks, uninstall_all_plugins,
 };
 use presets::{discover_presets, match_binary_to_preset, resolve_preset};
@@ -21,7 +21,6 @@ use presets::{discover_presets, match_binary_to_preset, resolve_preset};
 fn print_cli_status() {
     let presets = discover_presets();
     let node = detect_node();
-    let pi = detect_pi_ecosystem();
 
     println!("=========================================================================");
     println!(" AGY-TOOL v2.0 // Antigravity 合规插件中心、状态栏与内核扫描");
@@ -35,9 +34,11 @@ fn print_cli_status() {
         node.in_path,
         node.version.as_deref().unwrap_or("未检测到")
     );
+
+    let perm = inspect_permission_optimization();
     println!(
-        "  Pi 生态检测: .pi/agent={}, fast-context={}, pi-search={}, devin-search={}, jiti={}",
-        pi.has_pi_dir, pi.has_fast_context, pi.has_pi_search, pi.has_devin_search, pi.has_jiti
+        "  权限预授权: codemode白名单={}, 跨目录与.gitignore免弹窗={}",
+        perm.codemode_preauthorized, perm.non_workspace_and_gitignore_allowed
     );
 
     for p in inspect_all_plugins(&node) {
@@ -104,12 +105,12 @@ fn print_cli_status() {
 fn print_help() {
     println!(
         "\
-AGY-TOOL v2.0 — Antigravity 合规增强中心 (Codemode / Output Guard / 512K Rehydrate / Pi Bridge) 与工具箱
+AGY-TOOL v2.0 — Antigravity 合规增强中心 (Codemode / Output Guard / 512K Rehydrate) 与工具箱
 
 用法:
   agy-tool.exe                                  # 启动独立轻量高密度 GUI 面板 (默认)
-  agy-tool.exe --status | --inspect             # 只读扫描合规插件、Node/Pi 生态、内核与 HUD 状态
-  agy-tool.exe --install-plugins                # 一键安装并启用全部 4 个合规插件 (0 改二进制)
+  agy-tool.exe --status | --inspect             # 只读扫描合规插件、Node 环境、内核与 HUD 状态
+  agy-tool.exe --install-plugins                # 一键安装并启用全部 3 个合规插件 (0 改二进制)
   agy-tool.exe --uninstall-plugins              # 一键卸载全部合规插件并清理 config.json
   agy-tool.exe --check-plugins                  # 实机冒烟检测已安装插件的 MCP 握手与 Hook 响应
   agy-tool.exe --inject-hud                     # 注入底部 Request Review 左侧 HUD (自动清理旧版顶栏)
@@ -128,8 +129,8 @@ fn launch_gui(dump_ui_path: Option<String>) -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("AGY-TOOL v2.0 — Antigravity 合规增强中心与工具箱")
-            .with_inner_size([1120.0, 820.0])
-            .with_min_inner_size([960.0, 680.0]),
+            .with_inner_size([1060.0, 640.0])
+            .with_min_inner_size([940.0, 580.0]),
         ..Default::default()
     };
     eframe::run_native(

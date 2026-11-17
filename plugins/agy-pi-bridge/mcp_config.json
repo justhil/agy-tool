@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "agy_pi_bridge": {
-      "command": "node",
-      "args": ["${PLUGIN_ROOT}/scripts/pi-bridge-mcp.mjs"]
-    }
-  }
-}

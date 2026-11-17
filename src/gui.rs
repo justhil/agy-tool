@@ -9,9 +9,10 @@ use crate::patcher::{
     PromptPatch, TemplateSlot,
 };
 use crate::plugins::{
-    detect_node, detect_pi_ecosystem, inspect_all_plugins, install_all_plugins, install_plugin,
-    plugins_root_dir, run_plugin_smoke_checks, toggle_plugin_enabled, uninstall_all_plugins,
-    uninstall_plugin, NodeDetection, PiEcosystemStatus, PluginId, PluginInspection,
+    detect_node, inspect_all_plugins, inspect_permission_optimization, install_all_plugins,
+    install_plugin, run_plugin_smoke_checks, set_permission_optimization, toggle_plugin_enabled,
+    uninstall_all_plugins, uninstall_plugin, NodeDetection, PermissionOptimization, PluginId,
+    PluginInspection,
 };
 use crate::presets::{discover_presets, match_binary_to_preset, PromptPreset};
 use eframe::egui::{
@@ -57,8 +58,8 @@ pub enum WorkerEvent {
         hud: HudInspection,
         proc_status: ProcessStatus,
         plugins: Vec<PluginInspection>,
+        perm_opt: PermissionOptimization,
         node: NodeDetection,
-        pi: PiEcosystemStatus,
         init_select: bool,
     },
     LightTick {
@@ -76,8 +77,8 @@ pub struct AgyToolApp {
     pub hud: HudInspection,
     pub proc_status: ProcessStatus,
     pub plugins: Vec<PluginInspection>,
+    pub perm_opt: PermissionOptimization,
     pub node_info: NodeDetection,
-    pub pi_info: PiEcosystemStatus,
     pub selected_context_mode: ContextMode,
     pub selected_binary_tab: usize,
     pub show_slot_table: bool,
@@ -123,17 +124,11 @@ impl AgyToolApp {
             hud: placeholder_hud,
             proc_status: ProcessStatus::default(),
             plugins: Vec::new(),
+            perm_opt: PermissionOptimization::default(),
             node_info: NodeDetection {
                 in_path: false,
                 resolved_path: None,
                 version: None,
-            },
-            pi_info: PiEcosystemStatus {
-                has_pi_dir: false,
-                has_fast_context: false,
-                has_pi_search: false,
-                has_devin_search: false,
-                has_jiti: false,
             },
             selected_context_mode: ContextMode::Unlock900K,
             selected_binary_tab: 0,
@@ -157,8 +152,8 @@ impl AgyToolApp {
             let proc_status = check_running_processes();
             let node = detect_node();
             let plugins = inspect_all_plugins(&node);
-            let pi = detect_pi_ecosystem();
-            app.apply_full_state(binaries, presets, hud, proc_status, plugins, node, pi, true);
+            let perm_opt = inspect_permission_optimization();
+            app.apply_full_state(binaries, presets, hud, proc_status, plugins, perm_opt, node, true);
             app.busy = false;
             app.busy_label.clear();
             app.append_log("已扫描 Antigravity 合规插件目录、Node.js 与内核状态。");
@@ -177,8 +172,8 @@ impl AgyToolApp {
         hud: HudInspection,
         proc_status: ProcessStatus,
         plugins: Vec<PluginInspection>,
+        perm_opt: PermissionOptimization,
         node: NodeDetection,
-        pi: PiEcosystemStatus,
         init_select: bool,
     ) {
         if init_select {
@@ -211,8 +206,8 @@ impl AgyToolApp {
         self.hud = hud;
         self.proc_status = proc_status;
         self.plugins = plugins;
+        self.perm_opt = perm_opt;
         self.node_info = node;
-        self.pi_info = pi;
     }
 
     fn append_log(&mut self, msg: impl Into<String>) {
@@ -235,20 +230,20 @@ impl AgyToolApp {
             let proc_status = check_running_processes();
             let node = detect_node();
             let plugins = inspect_all_plugins(&node);
-            let pi = detect_pi_ecosystem();
+            let perm_opt = inspect_permission_optimization();
             let _ = tx.send(WorkerEvent::FullState {
                 binaries,
                 presets,
                 hud,
                 proc_status,
                 plugins,
+                perm_opt,
                 node,
-                pi,
                 init_select,
             });
             if init_select {
                 let _ = tx.send(WorkerEvent::Log(
-                    "✔ 已完成合规插件、Node/Pi 生态与内核状态扫描。".to_string(),
+                    "✔ 已完成合规插件、Node.js 与内核状态扫描。".to_string(),
                 ));
             }
             let _ = tx.send(WorkerEvent::TaskFinished);
@@ -292,15 +287,15 @@ impl AgyToolApp {
             let proc_status = check_running_processes();
             let node = detect_node();
             let plugins = inspect_all_plugins(&node);
-            let pi = detect_pi_ecosystem();
+            let perm_opt = inspect_permission_optimization();
             let _ = tx.send(WorkerEvent::FullState {
                 binaries,
                 presets,
                 hud,
                 proc_status,
                 plugins,
+                perm_opt,
                 node,
-                pi,
                 init_select: false,
             });
             let _ = tx.send(WorkerEvent::TaskFinished);
@@ -310,9 +305,9 @@ impl AgyToolApp {
 
     fn run_install_all_plugins_async(&mut self, egui_ctx: egui::Context) {
         let node = self.node_info.clone();
-        self.spawn_task(egui_ctx, "正在部署并自检 4 个合规插件…", move |tx| {
+        self.spawn_task(egui_ctx, "正在部署并自检 3 个合规插件…", move |tx| {
             let _ = tx.send(WorkerEvent::Log(
-                "=== 部署全部 4 个官方合规插件 (0 改二进制) ===".to_string(),
+                "=== 部署全部 3 个官方合规插件 (0 改二进制) ===".to_string(),
             ));
             match install_all_plugins(&node) {
                 Ok(lines) => {
@@ -502,8 +497,8 @@ impl eframe::App for AgyToolApp {
                     hud,
                     proc_status,
                     plugins,
+                    perm_opt,
                     node,
-                    pi,
                     init_select,
                 } => {
                     self.apply_full_state(
@@ -512,8 +507,8 @@ impl eframe::App for AgyToolApp {
                         hud,
                         proc_status,
                         plugins,
+                        perm_opt,
                         node,
-                        pi,
                         init_select,
                     );
                 }
@@ -695,6 +690,17 @@ impl eframe::App for AgyToolApp {
                                 FG_MUTED
                             },
                         );
+
+                        let node_ver = self.node_info.version.as_deref().unwrap_or("未检测到");
+                        draw_badge(
+                            ui,
+                            &format!("Node {}", node_ver),
+                            if self.node_info.version.is_some() {
+                                ACCENT_GREEN
+                            } else {
+                                ACCENT_RED
+                            },
+                        );
                     });
                 });
             });
@@ -702,7 +708,7 @@ impl eframe::App for AgyToolApp {
         // 2. 底部操作日志栏
         egui::TopBottomPanel::bottom("bottom_logs")
             .resizable(true)
-            .default_height(130.0)
+            .default_height(136.0)
             .min_height(72.0)
             .frame(
                 egui::Frame::none()
@@ -792,11 +798,28 @@ impl AgyToolApp {
                         .strong()
                         .color(FG_MAIN),
                 );
-                ui.label(
-                    RichText::new("  ·  零修改二进制，支持三端热加载")
-                        .size(11.0)
-                        .color(FG_MUTED),
-                );
+                ui.add_space(10.0);
+                let mut non_ws = self.perm_opt.non_workspace_and_gitignore_allowed;
+                if ui
+                    .checkbox(
+                        &mut non_ws,
+                        RichText::new("免弹窗预授权 (codemode + 跨目录/.gitignore)")
+                            .size(11.0)
+                            .color(FG_SUB),
+                    )
+                    .changed()
+                {
+                    self.spawn_task(egui_ctx.clone(), "正在更新 config.json 权限设置…", move |tx| {
+                        match set_permission_optimization(non_ws) {
+                            Ok(m) => {
+                                let _ = tx.send(WorkerEvent::Log(m));
+                            }
+                            Err(e) => {
+                                let _ = tx.send(WorkerEvent::Log(format!("[错误] {}", e)));
+                            }
+                        }
+                    });
+                }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let uninst_all = egui::Button::new(
                         RichText::new("全部卸载").size(11.5).color(ACCENT_RED),
@@ -824,7 +847,7 @@ impl AgyToolApp {
                     }
 
                     let install_all = egui::Button::new(
-                        RichText::new("一键部署并启用全部 4 个插件")
+                        RichText::new("一键部署并启用全部 3 个插件")
                             .size(11.5)
                             .strong()
                             .color(Color32::from_rgb(250, 252, 255)),
@@ -841,37 +864,21 @@ impl AgyToolApp {
 
         ui.add_space(8.0);
 
-        let avail = ui.available_width();
-        let left_w = (avail * 0.59).floor();
-        let right_w = (avail - left_w - 10.0).max(300.0);
+        let plugins_snapshot = self.plugins.clone();
+        let node_snapshot = self.node_info.clone();
 
-        ui.horizontal_top(|ui| {
-            ui.spacing_mut().item_spacing.x = 10.0;
-
-            ui.allocate_ui_with_layout(
-                Vec2::new(left_w, 0.0),
-                Layout::top_down(Align::Min),
-                |ui| {
-                    let plugins_snapshot = self.plugins.clone();
-                    let node_snapshot = self.node_info.clone();
-
-                    for p in plugins_snapshot {
-                        self.render_plugin_card(ui, egui_ctx, &p, &node_snapshot);
-                        ui.add_space(7.0);
-                    }
-                },
-            );
-
-            ui.allocate_ui_with_layout(
-                Vec2::new(right_w, 0.0),
-                Layout::top_down(Align::Min),
-                |ui| {
-                    self.render_env_and_pi_card(ui);
-                    ui.add_space(8.0);
-                    self.render_section_04_hud(ui, egui_ctx);
-                },
-            );
+        // 3 列等高并排卡片：Codemode | Output Guard | 512K Rehydrate
+        let col_count = plugins_snapshot.len().max(1);
+        ui.columns(col_count, |cols| {
+            for (idx, p) in plugins_snapshot.iter().enumerate() {
+                self.render_plugin_card(&mut cols[idx], egui_ctx, p, &node_snapshot);
+            }
         });
+
+        ui.add_space(8.0);
+
+        // 下方通栏：桌面端输入框状态栏 (HUD) 控制卡片
+        self.render_section_04_hud(ui, egui_ctx);
     }
 
     fn render_plugin_card(
@@ -892,13 +899,14 @@ impl AgyToolApp {
         egui::Frame::none()
             .fill(BG_PANEL)
             .rounding(Rounding::same(7.0))
-            .inner_margin(Margin::symmetric(12.0, 9.0))
+            .inner_margin(Margin::symmetric(11.0, 9.0))
             .stroke(Stroke::new(
                 if p.installed && p.enabled { 1.3_f32 } else { 1.0_f32 },
                 border_col,
             ))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
+                ui.set_min_height(152.0);
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new(p.id.title())
@@ -906,18 +914,13 @@ impl AgyToolApp {
                             .strong()
                             .color(FG_MAIN),
                     );
-                    ui.label(
-                        RichText::new(format!("({})", p.dir_name))
-                            .font(FontId::new(11.0, FontFamily::Monospace))
-                            .color(FG_MUTED),
-                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let (badge_txt, badge_col) = if !p.installed {
                             ("未安装", FG_MUTED)
                         } else if !p.files_match {
-                            ("需更新覆盖", ACCENT_AMBER)
+                            ("需更新", ACCENT_AMBER)
                         } else if p.enabled {
-                            ("已启用 · 最新", ACCENT_GREEN)
+                            ("已启用", ACCENT_GREEN)
                         } else {
                             ("已停用", ACCENT_AMBER)
                         };
@@ -925,22 +928,28 @@ impl AgyToolApp {
                     });
                 });
 
-                ui.add_space(3.0);
+                ui.label(
+                    RichText::new(p.dir_name)
+                        .font(FontId::new(10.5, FontFamily::Monospace))
+                        .color(FG_MUTED),
+                );
+                ui.add_space(4.0);
+
                 ui.label(RichText::new(p.id.subtitle()).size(11.0).color(FG_SUB));
                 ui.add_space(6.0);
 
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(match p.id {
-                            PluginId::Codemode => "MCP: codemode, batch_reads  |  Rules: AGENTS.md",
-                            PluginId::OutputGuard => "Hook: PostToolUse (overwriteResult 转存指针)",
-                            PluginId::Rehydrate => "Hook: PreInvocation (4层回水 + /fork 祖先拼接)",
-                            PluginId::PiBridge => "Agents: oracle, librarian, worker, frontend-*  |  MCP 桥接",
-                        })
-                        .font(FontId::new(10.5, FontFamily::Monospace))
-                        .color(FG_MUTED),
-                    );
+                ui.label(
+                    RichText::new(match p.id {
+                        PluginId::Codemode => "MCP: codemode (eager: true) · Rules: AGENTS.md",
+                        PluginId::OutputGuard => "Hook: PostToolUse (智能报错雷达 + 转存 + 语法自检)",
+                        PluginId::Rehydrate => "来源: https://agy-rehydrate.pages.dev/",
+                    })
+                    .font(FontId::new(10.0, FontFamily::Monospace))
+                    .color(if p.id == PluginId::Rehydrate { ACCENT_BLUE } else { FG_MUTED }),
+                );
+                ui.add_space(8.0);
 
+                ui.horizontal(|ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if p.installed {
                             let del_btn = egui::Button::new(
@@ -949,7 +958,7 @@ impl AgyToolApp {
                             .fill(BG_SUBTLE)
                             .rounding(Rounding::same(4.0))
                             .stroke(Stroke::new(1.0_f32, BORDER_LINE))
-                            .min_size(Vec2::new(46.0, 23.0));
+                            .min_size(Vec2::new(46.0, 24.0));
                             if ui.add_enabled(!self.busy, del_btn).clicked() {
                                 let pid = p.id;
                                 self.spawn_task(egui_ctx.clone(), "正在卸载插件…", move |tx| {
@@ -969,12 +978,12 @@ impl AgyToolApp {
 
                         if p.installed && !p.files_match {
                             let upd_btn = egui::Button::new(
-                                RichText::new("更新文件").size(11.0).color(ACCENT_AMBER),
+                                RichText::new("更新").size(11.0).color(ACCENT_AMBER),
                             )
                             .fill(Color32::from_rgba_unmultiplied(217, 119, 6, 16))
                             .rounding(Rounding::same(4.0))
                             .stroke(Stroke::new(1.0_f32, ACCENT_AMBER))
-                            .min_size(Vec2::new(66.0, 23.0));
+                            .min_size(Vec2::new(48.0, 24.0));
                             if ui.add_enabled(!self.busy, upd_btn).clicked() {
                                 let pid = p.id;
                                 let node_c = node.clone();
@@ -1014,7 +1023,7 @@ impl AgyToolApp {
                                 BORDER_LINE
                             },
                         ))
-                        .min_size(Vec2::new(if p.installed { 56.0 } else { 76.0 }, 23.0));
+                        .min_size(Vec2::new(if p.installed { 56.0 } else { 82.0 }, 24.0));
 
                         if ui.add_enabled(!self.busy, toggle_btn).clicked() {
                             let pid = p.id;
@@ -1042,115 +1051,6 @@ impl AgyToolApp {
                     });
                 });
             });
-    }
-
-    fn render_env_and_pi_card(&self, ui: &mut egui::Ui) {
-        panel_card().show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new("本地环境与 Pi 扩展探测")
-                        .size(12.0)
-                        .strong()
-                        .color(FG_MAIN),
-                );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let ver = self.node_info.version.as_deref().unwrap_or("未检测到 Node");
-                    draw_badge(
-                        ui,
-                        &format!("Node {}", ver),
-                        if self.node_info.version.is_some() {
-                            ACCENT_GREEN
-                        } else {
-                            ACCENT_RED
-                        },
-                    );
-                });
-            });
-
-            ui.add_space(5.0);
-            egui::Frame::none()
-                .fill(BG_SUBTLE)
-                .rounding(Rounding::same(5.0))
-                .inner_margin(Margin::symmetric(8.0, 6.0))
-                .stroke(Stroke::new(1.0_f32, BORDER_LINE))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(
-                        RichText::new(format!("插件部署目录: {}", plugins_root_dir().display()))
-                            .font(FontId::new(10.5, FontFamily::Monospace))
-                            .color(FG_SUB),
-                    );
-                    ui.label(
-                        RichText::new(format!(
-                            "Node 解析方式: {} ({})",
-                            self.node_info.command_for_config(),
-                            if self.node_info.in_path {
-                                "全局 PATH"
-                            } else {
-                                "自动定位绝对路径"
-                            }
-                        ))
-                        .font(FontId::new(10.5, FontFamily::Monospace))
-                        .color(FG_SUB),
-                    );
-                    ui.add_space(3.0);
-                    ui.horizontal_wrapped(|ui| {
-                        ui.spacing_mut().item_spacing.x = 6.0;
-                        draw_kv_tag(
-                            ui,
-                            "fast-context",
-                            if self.pi_info.has_fast_context { "已就绪" } else { "未安装" },
-                            if self.pi_info.has_fast_context { ACCENT_GREEN } else { FG_MUTED },
-                        );
-                        draw_kv_tag(
-                            ui,
-                            "pi-search",
-                            if self.pi_info.has_pi_search && self.pi_info.has_jiti {
-                                "已就绪"
-                            } else {
-                                "未安装"
-                            },
-                            if self.pi_info.has_pi_search && self.pi_info.has_jiti {
-                                ACCENT_GREEN
-                            } else {
-                                FG_MUTED
-                            },
-                        );
-                        draw_kv_tag(
-                            ui,
-                            "devin-search",
-                            if self.pi_info.has_devin_search && self.pi_info.has_jiti {
-                                "已就绪"
-                            } else {
-                                "未安装"
-                            },
-                            if self.pi_info.has_devin_search && self.pi_info.has_jiti {
-                                ACCENT_GREEN
-                            } else {
-                                FG_MUTED
-                            },
-                        );
-                    });
-                });
-
-            ui.add_space(5.0);
-            let installed_bins: Vec<&BinaryInspection> =
-                self.binaries.iter().filter(|b| b.exists).collect();
-            ui.label(
-                RichText::new(format!("已发现 {} 个 Antigravity 内核文件：", installed_bins.len()))
-                    .size(11.0)
-                    .strong()
-                    .color(FG_SUB),
-            );
-            for b in installed_bins {
-                ui.label(
-                    RichText::new(format!("  • {}", b.label))
-                        .size(10.5)
-                        .color(FG_MUTED),
-                );
-            }
-        });
     }
 
     fn render_legacy_binary_view(&mut self, ui: &mut egui::Ui, egui_ctx: &egui::Context) {

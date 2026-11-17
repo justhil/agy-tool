@@ -13,15 +13,13 @@ pub enum PluginId {
     Codemode,
     OutputGuard,
     Rehydrate,
-    PiBridge,
 }
 
 impl PluginId {
-    pub const ALL: [PluginId; 4] = [
+    pub const ALL: [PluginId; 3] = [
         PluginId::Codemode,
         PluginId::OutputGuard,
         PluginId::Rehydrate,
-        PluginId::PiBridge,
     ];
 
     pub fn dir_name(self) -> &'static str {
@@ -29,7 +27,6 @@ impl PluginId {
             PluginId::Codemode => "agy-codemode",
             PluginId::OutputGuard => "agy-output-guard",
             PluginId::Rehydrate => "agy-rehydrate",
-            PluginId::PiBridge => "agy-pi-bridge",
         }
     }
 
@@ -38,16 +35,14 @@ impl PluginId {
             PluginId::Codemode => "Codemode 并发沙箱与行为校准",
             PluginId::OutputGuard => "工具输出防爆折叠 (Output Guard)",
             PluginId::Rehydrate => "512K 压缩无损回水 (Rehydrate)",
-            PluginId::PiBridge => "Pi 并发角色与检索工具桥接",
         }
     }
 
     pub fn subtitle(self) -> &'static str {
         match self {
-            PluginId::Codemode => "node:vm 单回合并发探索/过滤 (codemode + batch_reads) + Argon 防幻觉/自适应规范",
-            PluginId::OutputGuard => "PostToolUse 自动拦截 >28KB / >750行输出并转存落盘，防止单次返回冲爆上下文",
-            PluginId::Rehydrate => "PreInvocation 零缓存损耗按需回水：时间线 / /fork 溯源 / 对话 / 磁盘热点文件(含 Windows 路径)",
-            PluginId::PiBridge => "oracle / librarian / worker / frontend-* 原生异步并发角色 + 动态桥接本地 fast_context / pi-search",
+            PluginId::Codemode => "Eager 挂载 · read_file / grep / outline / git_diff / 跨会话检索 search_sessions + 行为校准",
+            PluginId::OutputGuard => "ANSI/重复行降噪 + 超36KB/850行落盘折叠 + 自动抽提中间段 Error/Fail 报错 + 编辑语法自检",
+            PluginId::Rehydrate => "PreInvocation 零缓存损耗按需回水：时间线 / /fork 溯源 / 对话 / 规范文档 / 读写文件",
         }
     }
 }
@@ -117,60 +112,11 @@ const REHYDRATE_FILES: &[EmbeddedFile] = &[
     },
 ];
 
-const PI_BRIDGE_FILES: &[EmbeddedFile] = &[
-    EmbeddedFile {
-        rel_path: "plugin.json",
-        content: include_str!("../plugins/agy-pi-bridge/plugin.json"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "mcp_config.json",
-        content: include_str!("../plugins/agy-pi-bridge/mcp_config.json"),
-        rewrite_node: true,
-    },
-    EmbeddedFile {
-        rel_path: "rules/AGENTS.md",
-        content: include_str!("../plugins/agy-pi-bridge/rules/AGENTS.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "agents/oracle.md",
-        content: include_str!("../plugins/agy-pi-bridge/agents/oracle.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "agents/librarian.md",
-        content: include_str!("../plugins/agy-pi-bridge/agents/librarian.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "agents/worker.md",
-        content: include_str!("../plugins/agy-pi-bridge/agents/worker.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "agents/frontend-scout.md",
-        content: include_str!("../plugins/agy-pi-bridge/agents/frontend-scout.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "agents/frontend-worker.md",
-        content: include_str!("../plugins/agy-pi-bridge/agents/frontend-worker.md"),
-        rewrite_node: false,
-    },
-    EmbeddedFile {
-        rel_path: "scripts/pi-bridge-mcp.mjs",
-        content: include_str!("../plugins/agy-pi-bridge/scripts/pi-bridge-mcp.mjs"),
-        rewrite_node: false,
-    },
-];
-
 fn embedded_files(id: PluginId) -> &'static [EmbeddedFile] {
     match id {
         PluginId::Codemode => CODEMODE_FILES,
         PluginId::OutputGuard => OUTPUT_GUARD_FILES,
         PluginId::Rehydrate => REHYDRATE_FILES,
-        PluginId::PiBridge => PI_BRIDGE_FILES,
     }
 }
 
@@ -273,50 +219,6 @@ pub fn detect_node() -> NodeDetection {
 }
 
 #[derive(Debug, Clone)]
-pub struct PiEcosystemStatus {
-    pub has_pi_dir: bool,
-    pub has_fast_context: bool,
-    pub has_pi_search: bool,
-    pub has_devin_search: bool,
-    pub has_jiti: bool,
-}
-
-pub fn detect_pi_ecosystem() -> PiEcosystemStatus {
-    let pi_dir = user_home_dir().join(".pi").join("agent");
-    let has_pi_dir = pi_dir.exists();
-    let has_fast_context = [
-        pi_dir.join("git/github.com/justhil/pi-fast-context/src/lib/core.mjs"),
-        pi_dir.join("npm/node_modules/pi-fast-context/src/lib/core.mjs"),
-        pi_dir.join("local-packages/pi-fast-context/src/lib/core.mjs"),
-    ]
-    .iter()
-    .any(|p| p.exists());
-    let has_pi_search = [
-        pi_dir.join("git/github.com/justhil/pi-search/index.ts"),
-        pi_dir.join("npm/node_modules/pi-search/index.ts"),
-        pi_dir.join("local-packages/pi-search/index.ts"),
-    ]
-    .iter()
-    .any(|p| p.exists());
-    let has_devin_search = [
-        pi_dir.join("git/github.com/justhil/pi-devin-search/src/index.ts"),
-        pi_dir.join("npm/node_modules/pi-devin-search/src/index.ts"),
-        pi_dir.join("local-packages/pi-devin-search/src/index.ts"),
-    ]
-    .iter()
-    .any(|p| p.exists());
-    let has_jiti = pi_dir.join("npm/node_modules/jiti/lib/jiti.mjs").exists();
-
-    PiEcosystemStatus {
-        has_pi_dir,
-        has_fast_context,
-        has_pi_search,
-        has_devin_search,
-        has_jiti,
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct PluginInspection {
     pub id: PluginId,
     pub dir_name: &'static str,
@@ -336,6 +238,103 @@ fn read_config_json() -> Value {
     json!({})
 }
 
+const CODEMODE_PERMISSION_KEY: &str = "mcp(agy-codemode_agy_codemode/codemode)";
+
+#[derive(Debug, Clone, Default)]
+pub struct PermissionOptimization {
+    pub codemode_preauthorized: bool,
+    pub non_workspace_and_gitignore_allowed: bool,
+}
+
+fn ensure_allow_entry(user_settings: &mut serde_json::Map<String, Value>, entry: &str) {
+    if !user_settings.contains_key("globalPermissionGrants")
+        || !user_settings["globalPermissionGrants"].is_object()
+    {
+        user_settings.insert("globalPermissionGrants".to_string(), json!({ "allow": [] }));
+    }
+    let grants = user_settings
+        .get_mut("globalPermissionGrants")
+        .unwrap()
+        .as_object_mut()
+        .unwrap();
+    if !grants.contains_key("allow") || !grants["allow"].is_array() {
+        grants.insert("allow".to_string(), json!([]));
+    }
+    let allow_arr = grants.get_mut("allow").unwrap().as_array_mut().unwrap();
+    if !allow_arr.iter().any(|v| v.as_str() == Some(entry)) {
+        allow_arr.push(Value::String(entry.to_string()));
+    }
+}
+
+pub fn inspect_permission_optimization() -> PermissionOptimization {
+    let root = read_config_json();
+    let Some(us) = root.get("userSettings").and_then(|v| v.as_object()) else {
+        return PermissionOptimization::default();
+    };
+    let codemode_preauthorized = root
+        .pointer("/userSettings/globalPermissionGrants/allow")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().any(|x| x.as_str() == Some(CODEMODE_PERMISSION_KEY)))
+        .unwrap_or(false);
+
+    let non_ws = us
+        .get("nonWorkspaceFileAccessPolicy")
+        .and_then(|v| v.as_str())
+        == Some("AGENT_SETTING_POLICY_ALLOW")
+        && us
+            .get("allowAgentAccessGitignoreFiles")
+            .and_then(|v| v.as_bool())
+            == Some(true);
+
+    PermissionOptimization {
+        codemode_preauthorized,
+        non_workspace_and_gitignore_allowed: non_ws,
+    }
+}
+
+pub fn set_permission_optimization(enable_non_ws_gitignore: bool) -> Result<String, String> {
+    let p = config_json_path();
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {}", e))?;
+    }
+    let mut root = read_config_json();
+    if !root.is_object() {
+        root = json!({});
+    }
+    let obj = root.as_object_mut().unwrap();
+    if !obj.contains_key("userSettings") || !obj["userSettings"].is_object() {
+        obj.insert("userSettings".to_string(), json!({}));
+    }
+    let us = obj.get_mut("userSettings").unwrap().as_object_mut().unwrap();
+    ensure_allow_entry(us, CODEMODE_PERMISSION_KEY);
+
+    if enable_non_ws_gitignore {
+        us.insert(
+            "nonWorkspaceFileAccessPolicy".to_string(),
+            json!("AGENT_SETTING_POLICY_ALLOW"),
+        );
+        us.insert("allowAgentAccessNonWorkspaceFiles".to_string(), json!(true));
+        us.insert("allowAgentAccessGitignoreFiles".to_string(), json!(true));
+        us.insert("allowCascadeAccessGitignoreFiles".to_string(), json!(true));
+    } else {
+        us.remove("nonWorkspaceFileAccessPolicy");
+        us.remove("allowAgentAccessNonWorkspaceFiles");
+        us.remove("allowAgentAccessGitignoreFiles");
+        us.remove("allowCascadeAccessGitignoreFiles");
+    }
+
+    let out = serde_json::to_string_pretty(&root).map_err(|e| format!("序列化 config.json 失败: {}", e))?;
+    let tmp = p.with_extension("json.tmp");
+    fs::write(&tmp, out).map_err(|e| format!("写入临时配置失败: {}", e))?;
+    fs::rename(&tmp, &p).map_err(|e| format!("原子更新 config.json 失败: {}", e))?;
+
+    Ok(if enable_non_ws_gitignore {
+        "✔ 已开启免弹窗预授权 (codemode 白名单 + 允许跨目录与 .gitignore 文件访问)".to_string()
+    } else {
+        "✔ 已关闭跨目录与 .gitignore 免弹窗访问 (保留 codemode 白名单)".to_string()
+    })
+}
+
 fn write_config_json_plugin_state(dir_name: &str, enabled: bool) -> Result<(), String> {
     let p = config_json_path();
     if let Some(parent) = p.parent() {
@@ -351,6 +350,15 @@ fn write_config_json_plugin_state(dir_name: &str, enabled: bool) -> Result<(), S
     }
     let plugins_map = obj.get_mut("plugins").unwrap().as_object_mut().unwrap();
     plugins_map.insert(dir_name.to_string(), json!({ "enabled": enabled }));
+
+    // Automatically pre-authorize codemode in globalPermissionGrants.allow when enabled
+    if dir_name == "agy-codemode" && enabled {
+        if !obj.contains_key("userSettings") || !obj["userSettings"].is_object() {
+            obj.insert("userSettings".to_string(), json!({}));
+        }
+        let us = obj.get_mut("userSettings").unwrap().as_object_mut().unwrap();
+        ensure_allow_entry(us, CODEMODE_PERMISSION_KEY);
+    }
 
     let out = serde_json::to_string_pretty(&root).map_err(|e| format!("序列化 config.json 失败: {}", e))?;
     let tmp = p.with_extension("json.tmp");
@@ -489,6 +497,9 @@ pub fn install_all_plugins(node: &NodeDetection) -> Result<Vec<String>, String> 
     for &id in &PluginId::ALL {
         logs.extend(install_plugin(id, node)?);
     }
+    if let Ok(msg) = set_permission_optimization(true) {
+        logs.push(msg);
+    }
     Ok(logs)
 }
 
@@ -610,16 +621,6 @@ pub fn run_plugin_smoke_checks(node: &NodeDetection) -> Vec<String> {
         }
     } else {
         logs.push("  - agy-rehydrate 尚未安装，跳过 Hook 检测".to_string());
-    }
-
-    let pb_script = root.join("agy-pi-bridge/scripts/pi-bridge-mcp.mjs");
-    if pb_script.exists() {
-        match test_mcp_tools_list(&exe, &pb_script) {
-            Ok(tools) => logs.push(format!("✔ agy-pi-bridge MCP 握手正常，发现工具 ({}): {}", tools.len(), tools.join(", "))),
-            Err(e) => logs.push(format!("✖ agy-pi-bridge MCP 检测失败: {}", e)),
-        }
-    } else {
-        logs.push("  - agy-pi-bridge 尚未安装，跳过 MCP 检测".to_string());
     }
 
     logs

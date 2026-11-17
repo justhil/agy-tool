@@ -2,7 +2,12 @@
   "mcpServers": {
     "agy_codemode": {
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/scripts/codemode-mcp.mjs"]
+      "args": ["${PLUGIN_ROOT}/scripts/codemode-mcp.mjs"],
+      "tools": {
+        "codemode": {
+          "eager": true
+        }
+      }
     }
   }
 }

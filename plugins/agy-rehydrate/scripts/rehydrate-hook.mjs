@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 /**
- * AGY Lossless Post-Compaction State Rehydration (+ /fork lineage stitching)
- * Pure Node.js, zero external deps. Cross-platform (Windows / macOS / Linux)
- * and cross-surface (Antigravity Desktop 2.0 / agy CLI / Antigravity IDE).
+ * AGY Lossless Post-Compaction Rehydration — Tailored for Antigravity's native
+ * trajectory & CHECKPOINT architecture, structured with Pi's compaction discipline.
+ *
+ * Pure Node.js, zero third-party deps.
+ * - Normal turns: exits in <10ms returning `{}` (zero prefix mutation, 100% Prompt Cache hit).
+ * - Immediately after a CHECKPOINT (including across `/fork` chains):
+ *   Restores ONLY the dynamic trajectory context lost to compaction (without duplicating
+ *   global `<user_rules>` that Antigravity already injects every turn):
+ *   1. `<user-request-timeline>` (origin + recent `<USER_REQUEST>` history across `/fork` ancestors)
+ *   2. `<pre-compaction-dialogue>` (verbatim tail turns + native tool call summary)
+ *   3. `<active-skills-and-docs>` (`SKILL.md`, workspace `AGENTS.md`, `SPEC`/`PLAN` read in session)
+ *   4. `<workspace-file-state>` (`<modified-files>` & `<read-files>` + fresh disk slices with `read_file` Path/StartLine hints)
  */
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const MARKER_PREFIX = "[POST-COMPACT REHYDRATION v1";
+const MARKER_PREFIX = "[POST-COMPACT REHYDRATION v2";
 
-// Sized gracefully for 512K window (~32K-42K tokens = 6%-8% of context)
 const BUDGET_ALL_USER_CHARS = 28000;
 const BUDGET_RECENT_TURNS_CHARS = 48000;
-const BUDGET_SKILLS_SPECS_CHARS = 24000;
+const BUDGET_PROJECT_CONTEXT_CHARS = 26000;
 const BUDGET_FILES_TOTAL_CHARS = 56000;
 const BUDGET_SINGLE_FILE_CHARS = 14000;
 
@@ -24,18 +32,20 @@ const FOLD_PASTE_HEAD_CHARS = 300;
 const FOLD_PASTE_TAIL_CHARS = 200;
 
 const MAX_MODIFIED_FILES = 4;
-const MAX_REFERENCED_FILES = 4;
+const MAX_READ_FILES = 4;
 const MAX_FORK_DEPTH = 8;
 const FRESH_CHECKPOINT_MAX_GAP = 8;
-const MAX_INJECT_STEP_BYTES = 44000; // Under AGY 49,152-byte per-SystemMessageStep limit
+const MAX_INJECT_STEP_BYTES = 44000;
 
-const READ_TOOL_NAMES = new Set(["read_file", "view_file", "view_file_outline", "view_code_item"]);
+const READ_TOOL_NAMES = new Set(["read_file", "view_file", "view_file_outline", "view_code_item", "read"]);
 const WRITE_TOOL_NAMES = new Set([
   "edit_file",
   "write_file",
   "write_to_file",
   "replace_file_content",
   "multi_replace_file_content",
+  "edit",
+  "write",
 ]);
 
 const SKIP_EXTS = new Set([
@@ -55,6 +65,7 @@ const SKIP_PATH_SUBSTRINGS = [
   "/dev/shm/",
   "/tmp/",
   "/antigravity/scratch/tool-dumps/",
+  "/antigravity/mcp/",
   "/antigravity-cli/log/",
   "/antigravity-cli/history.jsonl",
   "/builtin/skills/antigravity_guide/",
@@ -78,7 +89,10 @@ function extractUserText(raw) {
     if (m[1].trim()) matches.push(m[1].trim());
   }
   if (matches.length) return matches.join("\n");
-  return raw.replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, "").trim();
+  return raw
+    .replace(/<ADDITIONAL_METADATA>[\s\S]*?<\/ADDITIONAL_METADATA>/g, "")
+    .replace(/<USER_SETTINGS_CHANGE>[\s\S]*?<\/USER_SETTINGS_CHANGE>/g, "")
+    .trim();
 }
 
 function isLowInfoShortTurn(txt) {
@@ -91,9 +105,9 @@ function foldUserPaste(txt, segPath, lineNo, stepIdx) {
   if (txt.length <= FOLD_PASTE_THRESHOLD_CHARS) return [txt, false];
   const omitted = txt.length - FOLD_PASTE_HEAD_CHARS - FOLD_PASTE_TAIL_CHARS;
   if (omitted <= 120) return [txt, false];
-  const loc = segPath ? `${normPath(segPath)} line ${lineNo} (step ${stepIdx})` : `step ${stepIdx}`;
+  const loc = segPath ? `Path="${normPath(segPath)}" StartLine=${lineNo} EndLine=${lineNo} (step ${stepIdx})` : `step ${stepIdx}`;
   return [
-    `${txt.slice(0, FOLD_PASTE_HEAD_CHARS)}\n  ...[folded ${omitted} chars of pasted content; read_file ${loc} if exact text needed]...\n${txt.slice(-FOLD_PASTE_TAIL_CHARS)}`,
+    `${txt.slice(0, FOLD_PASTE_HEAD_CHARS)}\n  ...[folded ${omitted} chars of pasted content; call read_file(${loc}) if exact text needed]...\n${txt.slice(-FOLD_PASTE_TAIL_CHARS)}`,
     true,
   ];
 }
@@ -119,16 +133,18 @@ function summarizeToolCalls(toolCalls) {
     if (READ_TOOL_NAMES.has(name) || WRITE_TOOL_NAMES.has(name)) {
       const p = extractToolFilePath(args);
       parts.push(`${name}(${p ? path.basename(p) : "?"})`);
-    } else if (name === "run_command" || name === "run_in_terminal") {
+    } else if (name === "run_command" || name === "run_in_terminal" || name === "bash") {
       let cmd = String(args.CommandLine || args.Command || args.command || "").trim().replace(/\n/g, " ");
       if (cmd.length > 60) cmd = cmd.slice(0, 57) + "...";
       parts.push(`${name}(\`${cmd}\`)`);
+    } else if (name === "call_mcp_tool") {
+      parts.push(`mcp:${args.ToolName || args.ServerName || "call"}`);
     } else {
       parts.push(name);
     }
   }
   if ((toolCalls || []).length > 8) parts.push(`+${toolCalls.length - 8} more`);
-  return parts.join(", ");
+  return parts.join("; ");
 }
 
 function isEligibleTextFile(pathStr) {
@@ -148,10 +164,10 @@ function isEligibleTextFile(pathStr) {
   }
 }
 
-function isSkillOrSpec(pathStr) {
+function isProjectInstructionOrSpec(pathStr) {
   const name = path.basename(pathStr);
   const upper = name.toUpperCase();
-  return name === "SKILL.md" || name === "AGENTS.md" || (upper.endsWith(".MD") && /(SPEC|PLAN|TEMPLATE|HANDOFF)/.test(upper));
+  return name === "AGENTS.md" || name === "CLAUDE.md" || name === "SKILL.md" || (upper.endsWith(".MD") && /(SPEC|PLAN|TEMPLATE|HANDOFF)/.test(upper));
 }
 
 function readTextClipped(pathStr, maxChars) {
@@ -168,9 +184,9 @@ function readTextClipped(pathStr, maxChars) {
   if (text.includes("\u0000")) return null;
   if (text.length <= maxChars) return text;
   const headLen = Math.floor(maxChars * 0.68);
-  const tailLen = Math.max(0, maxChars - headLen - 90);
+  const tailLen = Math.max(0, maxChars - headLen - 110);
   const omitted = text.length - headLen - tailLen;
-  return `${text.slice(0, headLen)}\n... [truncated ~${omitted} chars in middle; read_file for full content] ...\n${tailLen > 0 ? text.slice(-tailLen) : ""}`;
+  return `${text.slice(0, headLen)}\n... [truncated ~${omitted} chars in middle; call read_file({ Path: "${normPath(pathStr)}", StartLine, EndLine }) for full content] ...\n${tailLen > 0 ? text.slice(-tailLen) : ""}`;
 }
 
 function parseIsoEpoch(ts) {
@@ -238,7 +254,6 @@ function findStepEpochInTranscript(jsonlPath, targetStep) {
       } catch {}
     }
 
-    // Fallback scan for long conversations where parent advanced well past K-1
     const fullLines = fs.readFileSync(jsonlPath, "utf8").split(/\r?\n/);
     for (const raw of fullLines) {
       if (!raw.includes(`"step_index":${targetStep}`) && !raw.includes(`"step_index": ${targetStep}`)) continue;
@@ -288,6 +303,13 @@ function loadHistoryForkHints(brainDir) {
   return { cidWorkspaces, forkEvents };
 }
 
+function compareScore(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] - b[i];
+  }
+  return 0;
+}
+
 function resolveForkAncestors(curPath, cached = null) {
   const firstInfo = readFirstStepInfo(curPath);
   if (!firstInfo || firstInfo.step <= 0) return [];
@@ -300,7 +322,10 @@ function resolveForkAncestors(curPath, cached = null) {
   }
 
   const curCid = inferCidFromTranscriptPath(curPath);
-  const brainDir = path.resolve(curPath, "..", "..", "..");
+  const logsDir = path.dirname(curPath);
+  const sysGenDir = path.dirname(logsDir);
+  const cidDir = path.basename(sysGenDir) === ".system_generated" ? path.dirname(sysGenDir) : logsDir;
+  const brainDir = path.dirname(cidDir);
   if (!fs.existsSync(brainDir)) return [];
 
   const { cidWorkspaces, forkEvents } = loadHistoryForkHints(brainDir);
@@ -343,7 +368,7 @@ function resolveForkAncestors(curPath, cached = null) {
       const delta = childEpoch !== null && found.epoch !== null ? Math.max(0, childEpoch - found.epoch) : 1e9;
       const score = [forkHit, wsMatch, exactTip, -delta];
 
-      if (!bestScore || score.some((v, idx) => v !== bestScore[idx] ? v > bestScore[idx] : false && false) || compareScore(score, bestScore) > 0) {
+      if (!bestScore || compareScore(score, bestScore) > 0) {
         bestScore = score;
         bestSeg = { cid, path: candPath, min_step: pFirst.step, max_step: targetPrev };
         bestEpoch = pFirst.epoch;
@@ -361,19 +386,11 @@ function resolveForkAncestors(curPath, cached = null) {
   return chainRev.reverse();
 }
 
-function compareScore(a, b) {
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return a[i] - b[i];
-  }
-  return 0;
-}
-
 function parseTranscriptSteps(segments, upToStep, workspacePaths = []) {
   const userInputs = [];
   const dialogue = [];
   const fileReads = new Map();
   const fileWrites = new Map();
-  let lastCheckpoint = null;
 
   for (const seg of segments) {
     if (!fs.existsSync(seg.path)) continue;
@@ -415,31 +432,62 @@ function parseTranscriptSteps(segments, upToStep, workspacePaths = []) {
         if (content || tcSummary) {
           dialogue.push({ role: "ASSISTANT", step: sidx, text: content, tools: tcSummary });
         }
-      } else if (typ === "CHECKPOINT" && seg.isCurrent) {
-        lastCheckpoint = { step: sidx, summary: (obj.content || "").trim() };
       }
     }
   }
 
-  return { userInputs, dialogue, fileReads, fileWrites, lastCheckpoint };
+  return { userInputs, dialogue, fileReads, fileWrites };
 }
 
 function getCodemodeHotFiles(workspacePaths = []) {
   const hotPath = path.join(os.homedir(), ".gemini", "antigravity", "scratch", "agy-codemode-hotfiles.json");
-  if (!fs.existsSync(hotPath)) return [];
+  if (!fs.existsSync(hotPath)) return { read: [], modified: [] };
   try {
     const data = JSON.parse(fs.readFileSync(hotPath, "utf8"));
-    const results = [];
+    const readOut = [];
+    const modOut = [];
     const targets = workspacePaths.map((w) => normPath(path.resolve(w)).toLowerCase());
-    for (const [wsKey, list] of Object.entries(data)) {
+    for (const [wsKey, val] of Object.entries(data)) {
       if (targets.length === 0 || targets.some((t) => t === wsKey || wsKey.startsWith(t) || t.startsWith(wsKey))) {
-        if (Array.isArray(list)) results.push(...list);
+        if (Array.isArray(val)) {
+          readOut.push(...val);
+        } else if (val && typeof val === "object") {
+          if (Array.isArray(val.read)) readOut.push(...val.read);
+          if (Array.isArray(val.modified)) modOut.push(...val.modified);
+        }
       }
     }
-    return results.sort((a, b) => (b.ts || 0) - (a.ts || 0)).map((x) => x.path);
+    return {
+      read: readOut.sort((a, b) => (b.ts || 0) - (a.ts || 0)).map((x) => x.path),
+      modified: modOut.sort((a, b) => (b.ts || 0) - (a.ts || 0)).map((x) => x.path),
+    };
   } catch {
-    return [];
+    return { read: [], modified: [] };
   }
+}
+
+function discoverProjectInstructionFiles(workspacePaths = []) {
+  const found = [];
+  const seen = new Set();
+  for (const ws of workspacePaths) {
+    let dir = path.resolve(ws);
+    for (let depth = 0; depth < 6; depth++) {
+      for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+        const cand = path.join(dir, name);
+        const key = normPath(cand).toLowerCase();
+        if (!seen.has(key) && isEligibleTextFile(cand)) {
+          seen.add(key);
+          found.push(cand);
+          break;
+        }
+      }
+      if (fs.existsSync(path.join(dir, ".git"))) break;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return found.reverse();
 }
 
 function buildRehydration(transcriptPath, upToCheckpointStep, ancestors, workspacePaths) {
@@ -454,14 +502,13 @@ function buildRehydration(transcriptPath, upToCheckpointStep, ancestors, workspa
   const lineageTag = segments.map((s) => `${s.cid.slice(0, 8)}(${s.min_step}..${s.max_step ?? upToCheckpointStep - 1})`).join("->");
   const header = `${MARKER_PREFIX} | checkpoint=${upToCheckpointStep} | fork_lineage=${lineageTag}]`;
 
-  // Section 1: Complete User Request Timeline
+  // 1. User Request Timeline (origin + verbatim recent requests)
   const totalUsers = userInputs.length;
   const recentThreshold = Math.max(0, totalUsers - RECENT_USER_VERBATIM_COUNT);
   const formattedUsers = [];
   for (let idx = 0; idx < totalUsers; idx++) {
     const u = userInputs[idx];
-    const isRecent = idx >= recentThreshold;
-    if (!isRecent && isLowInfoShortTurn(u.text)) continue;
+    if (idx < recentThreshold && isLowInfoShortTurn(u.text)) continue;
     const [txt] = foldUserPaste(u.text, u.segPath, u.lineNo, u.step);
     formattedUsers.push(`[step ${u.step}] ${txt}`);
   }
@@ -483,63 +530,95 @@ function buildRehydration(transcriptPath, upToCheckpointStep, ancestors, workspa
       s1Body = `${early}\n\n... [older mid-session prompts omitted for budget] ...\n\n${tailItems.join("\n---\n")}`;
     }
   }
-  const sec1 = `## 1. Complete User Request Timeline (${formattedUsers.length}/${totalUsers} turns)\n${s1Body || "(none)"}`;
+  const sec1 = `<user-request-timeline turns="${formattedUsers.length}/${totalUsers}">\n${s1Body || "(none)"}\n</user-request-timeline>`;
 
-  // Section 2: Recent Pre-Compaction Verbatim Dialogue
+  // 2. Recent Pre-Compaction Turns
   const tailDiag = [];
   let diagChars = 0;
   for (let i = dialogue.length - 1; i >= 0; i--) {
     const d = dialogue[i];
     const line = d.role === "USER"
-      ? `**[USER step ${d.step}]**: ${d.text}`
-      : `**[ASSISTANT step ${d.step}]**: ${d.text}${d.tools ? `\n  _(Tools run: ${d.tools})_` : ""}`;
+      ? `[User @step ${d.step}]: ${d.text}`
+      : `[Assistant @step ${d.step}]: ${d.text}${d.tools ? `\n[Tool calls]: ${d.tools}` : ""}`;
     if (diagChars + line.length + 2 > BUDGET_RECENT_TURNS_CHARS && tailDiag.length > 0) break;
     tailDiag.unshift(line);
     diagChars += line.length + 2;
   }
-  const sec2 = `## 2. Recent Pre-Compaction Verbatim Dialogue\n${tailDiag.join("\n\n") || "(none)"}`;
+  const sec2 = `<pre-compaction-dialogue>\n${tailDiag.join("\n\n") || "(none)"}\n</pre-compaction-dialogue>`;
 
-  // Merge hot files from transcript + agy-codemode
-  const codemodeHots = getCodemodeHotFiles(workspacePaths);
-  for (const ch of codemodeHots) {
-    if (!fileReads.has(ch) && !fileWrites.has(ch)) {
-      fileReads.set(ch, upToCheckpointStep - 1);
+  // Merge native + codemode hot files (modified vs read-only)
+  const cmHot = getCodemodeHotFiles(workspacePaths);
+  for (const mf of cmHot.modified) {
+    if (!fileWrites.has(mf)) fileWrites.set(mf, upToCheckpointStep - 1);
+  }
+  for (const rf of cmHot.read) {
+    if (!fileReads.has(rf) && !fileWrites.has(rf)) fileReads.set(rf, upToCheckpointStep - 1);
+  }
+
+  // 3. Active Skills, Project Instructions & Spec Docs touched in session
+  const wsInstructions = discoverProjectInstructionFiles(workspacePaths);
+  const allTouched = new Map([...fileReads, ...fileWrites]);
+  const touchedSpecs = [...allTouched.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([fp]) => fp)
+    .filter((fp) => isProjectInstructionOrSpec(fp) && isEligibleTextFile(fp));
+
+  const seenSpec = new Set();
+  const mergedSpecs = [];
+  for (const fp of [...wsInstructions, ...touchedSpecs]) {
+    const key = normPath(fp).toLowerCase();
+    // Skip global plugin rules since Antigravity already injects <user_rules> every turn
+    if (key.includes("/.gemini/config/plugins/")) continue;
+    if (!seenSpec.has(key)) {
+      seenSpec.add(key);
+      mergedSpecs.push(fp);
     }
   }
 
-  // Section 3: Active Skills & Spec Docs
-  const allTouched = new Map([...fileReads, ...fileWrites]);
-  const sortedTouched = [...allTouched.entries()].sort((a, b) => b[1] - a[1]);
   const specChunks = [];
   let specChars = 0;
-  for (const [fp] of sortedTouched) {
-    if (!isSkillOrSpec(fp) || !isEligibleTextFile(fp)) continue;
-    const content = readTextClipped(fp, Math.min(BUDGET_SINGLE_FILE_CHARS, BUDGET_SKILLS_SPECS_CHARS - specChars));
+  for (const fp of mergedSpecs) {
+    const cap = Math.min(BUDGET_SINGLE_FILE_CHARS, BUDGET_PROJECT_CONTEXT_CHARS - specChars);
+    if (cap <= 200) break;
+    const content = readTextClipped(fp, cap);
     if (!content) continue;
-    specChunks.push(`### ${normPath(fp)}\n\`\`\`markdown\n${content}\n\`\`\``);
+    specChunks.push(`<doc path="${normPath(fp)}">\n${content}\n</doc>`);
     specChars += content.length;
-    if (specChars >= BUDGET_SKILLS_SPECS_CHARS) break;
   }
-  const sec3 = `## 3. Restored Active Skills & Spec Docs\n${specChunks.join("\n\n") || "(none)"}`;
+  const sec3 = `<active-skills-and-docs>\n${specChunks.join("\n\n") || "(none)"}\n</active-skills-and-docs>`;
 
-  // Section 4: Restored Active Workspace Files (Top modified + Top read)
-  const modList = [...fileWrites.entries()].filter(([fp]) => !isSkillOrSpec(fp) && isEligibleTextFile(fp)).sort((a, b) => b[1] - a[1]).slice(0, MAX_MODIFIED_FILES);
-  const modSet = new Set(modList.map(([fp]) => fp.toLowerCase()));
-  const refList = [...fileReads.entries()].filter(([fp]) => !modSet.has(fp.toLowerCase()) && !isSkillOrSpec(fp) && isEligibleTextFile(fp)).sort((a, b) => b[1] - a[1]).slice(0, MAX_REFERENCED_FILES);
+  // 4. Modified vs Read-only File Operations + Fresh Disk Content
+  const modifiedAll = [...fileWrites.entries()]
+    .filter(([fp]) => !isProjectInstructionOrSpec(fp) && isEligibleTextFile(fp))
+    .sort((a, b) => b[1] - a[1])
+    .map(([fp]) => fp);
+  const modSet = new Set(modifiedAll.map((fp) => fp.toLowerCase()));
+  const readOnlyAll = [...fileReads.entries()]
+    .filter(([fp]) => !modSet.has(fp.toLowerCase()) && !isProjectInstructionOrSpec(fp) && isEligibleTextFile(fp))
+    .sort((a, b) => b[1] - a[1])
+    .map(([fp]) => fp);
+
+  const opTags = [];
+  if (readOnlyAll.length > 0) {
+    opTags.push(`<read-files>\n${readOnlyAll.slice(0, 20).map(normPath).join("\n")}\n</read-files>`);
+  }
+  if (modifiedAll.length > 0) {
+    opTags.push(`<modified-files>\n${modifiedAll.slice(0, 20).map(normPath).join("\n")}\n</modified-files>`);
+  }
 
   const fileChunks = [];
   let fileChars = 0;
-  for (const [tag, list] of [["MODIFIED", modList], ["READ", refList]]) {
-    for (const [fp] of list) {
+  for (const [tag, list] of [["MODIFIED", modifiedAll.slice(0, MAX_MODIFIED_FILES)], ["READ", readOnlyAll.slice(0, MAX_READ_FILES)]]) {
+    for (const fp of list) {
       if (fileChars >= BUDGET_FILES_TOTAL_CHARS) break;
       const cap = Math.min(BUDGET_SINGLE_FILE_CHARS, BUDGET_FILES_TOTAL_CHARS - fileChars);
       const content = readTextClipped(fp, cap);
       if (!content) continue;
-      fileChunks.push(`### [${tag}] ${normPath(fp)}\n\`\`\`\n${content}\n\`\`\``);
+      fileChunks.push(`<file status="${tag}" path="${normPath(fp)}">\n${content}\n</file>`);
       fileChars += content.length;
     }
   }
-  const sec4 = `## 4. Restored Active Workspace Files\n${fileChunks.join("\n\n") || "(none)"}`;
+  const sec4 = `<workspace-file-state>\n${opTags.join("\n\n")}\n\n<active-files>\n${fileChunks.join("\n\n") || "(none)"}\n</active-files>\n</workspace-file-state>`;
 
   return [header, sec1, sec2, sec3, sec4];
 }
@@ -558,7 +637,6 @@ function splitIntoInjectChunks(sections) {
       if (Buffer.byteLength(`${header} (cont.)\n\n${sec}`, "utf8") <= MAX_INJECT_STEP_BYTES) {
         cur = `${header} (cont.)\n\n${sec}\n\n`;
       } else {
-        // Split large section by paragraph
         const paras = sec.split("\n\n");
         let part = `${header} (cont.)\n\n`;
         for (const p of paras) {
@@ -617,7 +695,7 @@ function tailScanLatestCheckpoint(transcriptPath) {
         if (obj.type === "CHECKPOINT") {
           lastCp = obj.step_index;
           alreadyRehydrated = false;
-        } else if (obj.type === "SYSTEM_MESSAGE" && String(obj.content || "").includes(MARKER_PREFIX)) {
+        } else if (obj.type === "SYSTEM_MESSAGE" && String(obj.content || "").includes("[POST-COMPACT REHYDRATION")) {
           if (lastCp >= 0 && obj.step_index > lastCp) alreadyRehydrated = true;
         }
       } catch {}
@@ -628,11 +706,24 @@ function tailScanLatestCheckpoint(transcriptPath) {
   }
 }
 
+function readStdinAllSync() {
+  const chunks = [];
+  const buf = Buffer.alloc(65536);
+  while (true) {
+    try {
+      const n = fs.readSync(0, buf, 0, buf.length, null);
+      if (n <= 0) break;
+      chunks.push(Buffer.from(buf.subarray(0, n)));
+    } catch (e) {
+      if (e && (e.code === "EAGAIN" || e.code === "EINTR")) continue;
+      break;
+    }
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 function main() {
-  let raw = "";
-  try {
-    raw = fs.readFileSync(0, "utf8").trim();
-  } catch {}
+  const raw = readStdinAllSync().trim();
   if (!raw) {
     process.stdout.write("{}");
     return;
